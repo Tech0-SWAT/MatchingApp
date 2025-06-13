@@ -1,133 +1,183 @@
-"use client"
+import { type NextRequest, NextResponse } from "next/server";
+// ★ 修正: lib/prisma.ts へのインポートパスをプロジェクト構造に合わせて修正
+// tsconfig.json の設定でエイリアスが使えるようになったため、短いエイリアスパスを使用
+import prisma from "@/lib/prisma"; // @/lib/prisma は student-matching-app/lib/prisma を指す
 
-import type React from "react"
+// チーム関連の型定義
+// Prismaが生成する型を使うため、これらのインターフェースは厳密には不要ですが、
+// コードの可読性や既存の型定義との整合性のため残しておいても問題ありません。
+interface Team {
+  id: number;
+  course_step_id: number;
+  name: string;
+  project_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react"
+interface TeamMembership {
+  id: number;
+  team_id: number;
+  user_id: number;
+  role_in_team: string | null;
+  joined_at: string;
+}
 
-export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
-  const router = useRouter()
+interface TeamWithMembers extends Team {
+  members: Array<{
+    user_id: number;
+    user_name: string;
+    user_email: string;
+    role_in_team: string | null;
+    joined_at: string;
+  }>;
+  course_step_name: string;
+}
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
+// チーム作成API
+export async function POST(request: NextRequest) {
+  try {
+    const data = await request.json();
+    const { course_step_id, name, project_name, member_ids, creator_role } = data;
 
-    try {
-      // TODO: 実際の認証API呼び出し
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        // ログイン成功時の処理
-        router.push("/dashboard")
-      } else {
-        setError(data.error || "ログインに失敗しました")
-      }
-    } catch (error) {
-      console.error("ログインエラー:", error)
-      setError("ネットワークエラーが発生しました")
-    } finally {
-      setIsLoading(false)
+    // バリデーション
+    if (!course_step_id || !name || !Array.isArray(member_ids) || member_ids.length === 0) {
+      return NextResponse.json({ success: false, error: "必須項目が不足しています" }, { status: 400 });
     }
+
+    // ★ 修正: モックデータを削除し、Prismaを使ってデータベースにチーム作成
+    // トランザクションを使ってチームとメンバーシップを同時に作成
+    const newTeam = await prisma.$transaction(async (tx) => {
+      const team = await tx.teams.create({
+        data: {
+          course_step_id,
+          name: name.trim(),
+          project_name: project_name?.trim() || null,
+          // created_at, updated_at は Prisma の @default(now()) と @updatedAt で自動設定される
+        },
+      });
+
+      // メンバーシップの作成
+      const membershipData = member_ids.map((userId: number) => ({
+        team_id: team.id,
+        user_id: userId,
+        // チーム作成者は creator_role を設定、それ以外はnullまたはデフォルト値
+        role_in_team: userId === member_ids[0] && creator_role ? creator_role : null, // 最初のメンバーをクリエイターと仮定
+      }));
+
+      await tx.team_memberships.createMany({
+        data: membershipData,
+      });
+
+      return team;
+    });
+
+    console.log("チーム作成:", {
+      team_id: newTeam.id,
+      course_step_id,
+      name,
+      project_name,
+      member_ids,
+      creator_role,
+    });
+
+    return NextResponse.json({
+      success: true,
+      team_id: newTeam.id,
+      message: "チームが正常に作成されました",
+    });
+  } catch (error) {
+    console.error("チーム作成エラー:", error);
+    return NextResponse.json({ success: false, error: "サーバーエラーが発生しました" }, { status: 500 });
   }
+}
 
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#F8F9FA]">
-      <Card className="w-full max-w-md border border-gray-200 shadow-sm">
-        <CardContent className="p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-semibold text-[#343A40] mb-2">受講生マッチング</h1>
-            <p className="text-[#6C757D]">Tech0でのチーム活動をサポート</p>
-          </div>
+// チーム一覧取得API
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userIdParam = searchParams.get("userId");
+    const courseStepIdParam = searchParams.get("courseStepId");
 
-          {error && (
-            <Alert className="mb-6 border-red-200 bg-red-50">
-              <AlertCircle className="h-4 w-4 text-red-600" />
-              <AlertDescription className="text-red-800">{error}</AlertDescription>
-            </Alert>
-          )}
+    let whereClause: any = {};
 
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium text-[#343A40]">
-                メールアドレス
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#6C757D] w-4 h-4" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="例: user@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 h-11 border-2 border-gray-300 focus:border-[#5D70F7] transition-colors"
-                  required
-                />
-              </div>
-            </div>
+    // userIdによるフィルタリング (現在参加しているチームのみ)
+    if (userIdParam) {
+      const parsedUserId = parseInt(userIdParam, 10);
+      if (isNaN(parsedUserId)) {
+        return NextResponse.json({ success: false, error: "無効なユーザーIDです" }, { status: 400 });
+      }
+      // team_membershipsを介してユーザーが所属しているチームをフィルタリング
+      whereClause.team_memberships = {
+        some: {
+          user_id: parsedUserId,
+          left_at: null, // まだ離脱していないメンバー
+        },
+      };
+    }
 
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium text-[#343A40]">
-                パスワード
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#6C757D] w-4 h-4" />
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="パスワードを入力"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10 h-11 border-2 border-gray-300 focus:border-[#5D70F7] transition-colors"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#6C757D] hover:text-[#343A40]"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
+    // courseStepIdによるフィルタリング
+    if (courseStepIdParam) {
+      const parsedCourseStepId = parseInt(courseStepIdParam, 10);
+      if (isNaN(parsedCourseStepId)) {
+        return NextResponse.json({ success: false, error: "無効なコースステップIDです" }, { status: 400 });
+      }
+      whereClause.course_step_id = parsedCourseStepId;
+    }
 
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-11 bg-[#5D70F7] hover:bg-[#4D60E7] text-white font-medium transition-colors disabled:opacity-50"
-            >
-              {isLoading ? "ログイン中..." : "ログイン"}
-            </Button>
-          </form>
+    // ★ 修正: モックデータを削除し、Prismaを使ってデータベースからチーム情報を取得
+    const teams = await prisma.teams.findMany({
+      where: whereClause,
+      include: {
+        course_step: {
+          select: {
+            name: true,
+          },
+        },
+        team_memberships: {
+          where: {
+            left_at: null, // 現在のメンバーのみ
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        created_at: "desc", // 新しいチームが上に表示されるように
+      },
+    });
 
-          <div className="text-center pt-4">
-            <p className="text-sm text-[#6C757D]">
-              アカウントをお持ちでない方は
-              <a href="/signup" className="text-[#5D70F7] hover:underline ml-1 font-medium">
-                こちら (新規登録)
-              </a>
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
+    // データを整形 (モックデータに合わせて)
+    const formattedTeams: TeamWithMembers[] = teams.map((team) => ({
+      id: team.id,
+      course_step_id: team.course_step_id,
+      name: team.name,
+      project_name: team.project_name,
+      created_at: team.created_at.toISOString(),
+      updated_at: team.updated_at.toISOString(),
+      course_step_name: team.course_step.name,
+      members: team.team_memberships.map((membership) => ({
+        user_id: membership.user.id,
+        user_name: membership.user.name,
+        user_email: membership.user.email,
+        role_in_team: membership.role_in_team,
+        joined_at: membership.joined_at.toISOString(),
+      })),
+    }));
+
+    return NextResponse.json({
+      success: true,
+      teams: formattedTeams,
+    });
+  } catch (error) {
+    console.error("チーム取得エラー:", error);
+    return NextResponse.json({ success: false, error: "サーバーエラーが発生しました" }, { status: 500 });
+  }
 }
