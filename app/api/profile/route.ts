@@ -155,9 +155,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "ユーザーIDが必要です" }, { status: 400 });
     }
 
-    const userId = parseInt(userIdParam, 10);
-    if (isNaN(userId)) {
-      return NextResponse.json({ success: false, error: "無効なユーザーIDです" }, { status: 400 });
+    // ★ 修正: "current" の処理を追加
+    let userId: number;
+
+    if (userIdParam === "current") {
+      // 現在ログインしているユーザー（田中太郎）のID
+      userId = 1;
+    } else {
+      userId = parseInt(userIdParam, 10);
+      if (isNaN(userId)) {
+        return NextResponse.json({ success: false, error: "無効なユーザーIDです" }, { status: 400 });
+      }
     }
 
     // ユーザー情報と関連するプロフィール、ジャンル、時間帯、優先度をまとめて取得

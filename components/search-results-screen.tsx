@@ -1,17 +1,17 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
-import { Users, User, Clock, Briefcase, AlertCircle, Search } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Users, User, Clock, Briefcase, AlertCircle, Sparkles } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface SearchResultsScreenProps {
-  onNavigate: (screen: string, data?: any) => void
-  currentUser: any
+  onNavigate: (screen: string, data?: any) => void;
+  currentUser: any; // ログインユーザーの情報
 }
 
 const roleTypes = [
@@ -19,7 +19,7 @@ const roleTypes = [
   { value: "tech", label: "Tech (技術・開発)" },
   { value: "biz", label: "Biz (ビジネス・企画)" },
   { value: "design", label: "Design (デザイン・UX)" },
-]
+];
 
 const weekdayTimesOptions = [
   { value: "", label: "平日 特に希望なし" },
@@ -29,7 +29,7 @@ const weekdayTimesOptions = [
   { value: "平日 20時～22時", label: "平日 20時～22時" },
   { value: "平日 22時～24時", label: "平日 22時～24時" },
   { value: "平日 いつでも良い", label: "平日 いつでも良い" },
-]
+];
 
 const weekendTimesOptions = [
   { value: "", label: "土日祝 特に希望なし" },
@@ -46,7 +46,7 @@ const weekendTimesOptions = [
   { value: "土日祝 20時～22時", label: "土日祝 20時～22時" },
   { value: "土日祝 22時～24時", label: "土日祝 22時～24時" },
   { value: "土日祝 いつでも良い", label: "土日祝 いつでも良い" },
-]
+];
 
 const ideaStatuses = [
   { value: "", label: "こだわらない" },
@@ -54,7 +54,7 @@ const ideaStatuses = [
   { value: "rough", label: "おおまかなテーマや興味分野がある" },
   { value: "brainstorm", label: "アイデア出しから一緒に考えたい" },
   { value: "participate", label: "他の人のアイデアに積極的に参加したい" },
-]
+];
 
 const productGenres = [
   { value: "saas", label: "業務効率化・SaaS" },
@@ -66,22 +66,79 @@ const productGenres = [
   { value: "ai", label: "AI・機械学習を活用したプロダクト" },
   { value: "social", label: "ソーシャルグッド・地域活性化" },
   { value: "any", label: "ジャンルには特にこだわらない" },
-]
+];
 
-export default function SearchResultsScreen({ onNavigate, currentUser }: SearchResultsScreenProps) {
-  const [roleType, setRoleType] = useState("")
-  const [filteredStudents, setFilteredStudents] = useState<any[]>([]) // 初期値を空配列に設定
-  const [showResults, setShowResults] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [errors, setErrors] = useState<string[]>([])
+export default function SearchResultsScreen({ onNavigate, currentUser: initialCurrentUser }: SearchResultsScreenProps) {
+  const [roleType, setRoleType] = useState("");
+  const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
+  const [showResults, setShowResults] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [matchingStatusMessage, setMatchingStatusMessage] = useState<string | null>(null);
+  const [showMatchingResults, setShowMatchingResults] = useState(false);
 
-  const handleSearch = async () => {
-    setIsLoading(true)
-    setErrors([])
+  // currentUser の初期化を確実にする - idが無い場合はフォールバック値を設定
+  const currentUser = {
+    id: initialCurrentUser?.id || 1, // idが無い場合は1をデフォルトに
+    name: initialCurrentUser?.name || "田中 太郎",
+    email: initialCurrentUser?.email || "tanaka@example.com",
+    ...initialCurrentUser, // 他のプロパティも保持
+  };
+
+  const handleStartMatching = async () => {
+    setIsLoading(true);
+    setErrors([]);
+    setMatchingStatusMessage(null);
+    setFilteredStudents([]);
+    setShowResults(false);
 
     try {
-      const searchCriteria = {
-        roleType,
+      if (!currentUser || !currentUser.id) {
+        setErrors(["マッチングを開始するにはログインユーザーが必要です。"]);
+        setIsLoading(false);
+        return;
+      }
+
+      setMatchingStatusMessage("マッチング計算中...");
+
+      const response = await fetch("/api/matching/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          desired_role_in_team: roleType || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setMatchingStatusMessage("✅ マッチング計算が終了しました！結果を表示します。");
+        await fetchAndDisplayMatchResults();
+        setShowMatchingResults(true);
+      } else {
+        setErrors([data.error || "マッチング計算に失敗しました。"]);
+        setMatchingStatusMessage(null);
+      }
+    } catch (error) {
+      console.error("マッチング計算エラー:", error);
+      setErrors(["ネットワークエラーが発生しました。再度お試しください。"]);
+      setMatchingStatusMessage(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchAndDisplayMatchResults = async () => {
+    setIsLoading(true);
+    setErrors([]);
+    try {
+      if (!currentUser || !currentUser.id) {
+        setErrors(["マッチング結果を表示するにはログインユーザーが必要です。"]);
+        setIsLoading(false);
+        return;
       }
 
       const response = await fetch("/api/search", {
@@ -89,48 +146,51 @@ export default function SearchResultsScreen({ onNavigate, currentUser }: SearchR
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(searchCriteria),
-      })
+        body: JSON.stringify({
+          fetchMatchesOnly: true,
+          currentUserId: currentUser.id,
+        }),
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (data.success) {
-        setFilteredStudents(Array.isArray(data.results) ? data.results : [])
-        setShowResults(true)
+        setFilteredStudents(Array.isArray(data.results) ? data.results : []);
+        setShowResults(true);
       } else {
-        setErrors(data.errors || [data.error || "マッチングに失敗しました"])
-        setFilteredStudents([])
+        setErrors(data.errors || [data.error || "マッチング結果の取得に失敗しました"]);
+        setFilteredStudents([]);
       }
     } catch (error) {
-      console.error("マッチングエラー:", error)
-      setErrors(["ネットワークエラーが発生しました。再度お試しください。"])
-      setFilteredStudents([])
+      console.error("マッチング結果取得エラー:", error);
+      setErrors(["ネットワークエラーが発生しました。再度お試しください。"]);
+      setFilteredStudents([]);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleStudentClick = (student: any) => {
-    onNavigate("profile-detail", student)
-  }
+    onNavigate("profile-detail", student);
+  };
 
   const getRoleTypeLabel = (type: string) => {
-    const role = roleTypes.find((r) => r.value === type)
-    return role ? role.label : type
-  }
+    const role = roleTypes.find((r) => r.value === type);
+    return role ? role.label : type;
+  };
 
   const getIdeaStatusLabel = (status: string) => {
-    const idea = ideaStatuses.find((i) => i.value === status)
-    return idea ? idea.label : status
-  }
+    const idea = ideaStatuses.find((i) => i.value === status);
+    return idea ? idea.label : status;
+  };
 
   const getGenreLabels = (genres: string[]) => {
-    if (!Array.isArray(genres)) return []
+    if (!Array.isArray(genres)) return [];
     return genres.map((genre) => {
-      const found = productGenres.find((g) => g.value === genre)
-      return found ? found.label : genre
-    })
-  }
+      const found = productGenres.find((g) => g.value === genre);
+      return found ? found.label : genre;
+    });
+  };
 
   return (
     <div className="min-h-screen p-4 bg-[#F8F9FA]">
@@ -140,11 +200,7 @@ export default function SearchResultsScreen({ onNavigate, currentUser }: SearchR
             <h1 className="text-2xl font-semibold text-[#343A40] mb-2">仲間を探す (Tech0内)</h1>
             <p className="text-[#6C757D]">詳細な条件を設定して、最適な仲間を見つけましょう</p>
           </div>
-          <Button
-            onClick={() => onNavigate("team-management")}
-            variant="outline"
-            className="border-2 border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50] hover:text-white"
-          >
+          <Button onClick={() => onNavigate("team-management")} variant="outline" className="border-2 border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50] hover:text-white">
             <Users className="w-4 h-4 mr-2" />
             チーム管理
           </Button>
@@ -161,6 +217,14 @@ export default function SearchResultsScreen({ onNavigate, currentUser }: SearchR
                 ))}
               </ul>
             </AlertDescription>
+          </Alert>
+        )}
+
+        {/* マッチングステータスメッセージ */}
+        {matchingStatusMessage && (
+          <Alert className={`mb-6 ${matchingStatusMessage.startsWith("✅") ? "border-green-200 bg-green-50" : "border-blue-200 bg-blue-50"}`}>
+            <AlertCircle className={`h-4 w-4 ${matchingStatusMessage.startsWith("✅") ? "text-green-600" : "text-blue-600"}`} />
+            <AlertDescription className={`${matchingStatusMessage.startsWith("✅") ? "text-green-800" : "text-blue-800"}`}>{matchingStatusMessage}</AlertDescription>
           </Alert>
         )}
 
@@ -189,13 +253,10 @@ export default function SearchResultsScreen({ onNavigate, currentUser }: SearchR
                 </div>
               </div>
 
-              <Button
-                onClick={handleSearch}
-                disabled={isLoading}
-                className="w-full h-12 bg-[#FF8C42] hover:bg-[#E67C32] text-white font-medium text-lg disabled:opacity-50"
-              >
-                <Search className="w-4 h-4 mr-2" />
-                {isLoading ? "マッチング中..." : "マッチング開始"}
+              {/* マッチング開始ボタン */}
+              <Button onClick={handleStartMatching} disabled={isLoading || !currentUser || !currentUser.id} className="w-full h-12 bg-[#5D70F7] hover:bg-[#4D60E7] text-white font-medium text-lg disabled:opacity-50">
+                <Sparkles className="w-4 h-4 mr-2" />
+                {isLoading ? "マッチング計算中..." : "マッチングを開始する"}
               </Button>
             </div>
           </CardContent>
@@ -205,25 +266,19 @@ export default function SearchResultsScreen({ onNavigate, currentUser }: SearchR
         {showResults && (
           <div>
             <h2 className="text-xl font-semibold text-[#343A40] mb-6">
-              検索結果 ({Array.isArray(filteredStudents) ? filteredStudents.length : 0}件)
+              {showMatchingResults ? "あなたのマッチング結果" : "検索結果"} ({Array.isArray(filteredStudents) ? filteredStudents.length : 0}件)
             </h2>
 
             {!Array.isArray(filteredStudents) || filteredStudents.length === 0 ? (
               <Card className="border border-gray-200 shadow-sm p-8 text-center">
                 <div className="text-6xl mb-4">🔍</div>
-                <h3 className="text-lg font-semibold text-[#343A40] mb-2">
-                  条件に合うユーザーは見つかりませんでした。
-                </h3>
+                <h3 className="text-lg font-semibold text-[#343A40] mb-2">条件に合うユーザーは見つかりませんでした。</h3>
                 <p className="text-[#6C757D]">検索条件を変えてみてください。</p>
               </Card>
             ) : (
               <div className="space-y-4">
                 {filteredStudents.map((student, index) => (
-                  <Card
-                    key={student?.id || index}
-                    className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer w-full"
-                    onClick={() => handleStudentClick(student)}
-                  >
+                  <Card key={student?.id || index} className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer w-full" onClick={() => handleStudentClick(student)}>
                     <CardContent className="p-6">
                       <div className="flex-1">
                         <div className="flex items-start justify-between">
@@ -236,27 +291,24 @@ export default function SearchResultsScreen({ onNavigate, currentUser }: SearchR
                                 <h3 className="text-lg font-semibold text-[#343A40]">{student?.name || "名前不明"}</h3>
                                 <div className="flex items-center gap-2 text-sm text-[#6C757D]">
                                   <Badge variant="outline" className="text-xs">
-                                    {getRoleTypeLabel(student?.roleType || "")}
+                                    {getRoleTypeLabel(student?.profile?.desired_role_in_team || "")}
                                   </Badge>
-                                  {student?.personalityType && (
+                                  {student?.profile?.personality_type && (
                                     <Badge variant="outline" className="text-xs">
-                                      {student.personalityType}
+                                      {student.profile.personality_type}
                                     </Badge>
                                   )}
                                 </div>
                               </div>
                             </div>
 
-                            {/* マッチしたキーワード */}
-                            {Array.isArray(student?.matchKeywords) && student.matchKeywords.length > 0 && (
+                            {/* マッチしたキーワード (マッチング結果のみに表示) */}
+                            {showMatchingResults && Array.isArray(student?.match_keywords) && student.match_keywords.length > 0 && (
                               <div className="mb-3">
                                 <div className="text-sm font-medium text-[#343A40] mb-1">マッチしたキーワード</div>
                                 <div className="flex flex-wrap gap-1">
-                                  {student.matchKeywords.map((keyword: string, keywordIndex: number) => (
-                                    <Badge
-                                      key={keywordIndex}
-                                      className="bg-[#5D70F7]/10 text-[#5D70F7] border-[#5D70F7]/20"
-                                    >
+                                  {student.match_keywords.map((keyword: string, keywordIndex: number) => (
+                                    <Badge key={keywordIndex} className="bg-[#5D70F7]/10 text-[#5D70F7] border-[#5D70F7]/20">
                                       {keyword}
                                     </Badge>
                                   ))}
@@ -264,29 +316,27 @@ export default function SearchResultsScreen({ onNavigate, currentUser }: SearchR
                               </div>
                             )}
 
+                            {/* マッチングスコアと理由 (マッチング結果のみに表示) */}
+                            {showMatchingResults && student?.match_score !== undefined && (
+                              <div className="mb-3">
+                                <div className="text-sm font-medium text-[#343A40] mb-1">マッチングスコア</div>
+                                <Badge className="bg-[#FF8C42]/10 text-[#E67C32] border-[#FF8C42]/20">スコア: {student.match_score.toFixed(2)}</Badge>
+                                {student.match_reason && <p className="text-sm text-[#6C757D] line-clamp-2 mt-1">{student.match_reason}</p>}
+                              </div>
+                            )}
+
                             {/* アイデア状況とプロダクトジャンル */}
                             <div className="mb-3">
                               <div className="text-sm font-medium text-[#343A40] mb-1">アイデア状況・興味ジャンル</div>
                               <div className="flex flex-wrap gap-1">
-                                {student?.ideaStatus && (
-                                  <Badge className="bg-[#FFD700]/10 text-[#B8860B] border-[#FFD700]/20">
-                                    {getIdeaStatusLabel(student.ideaStatus)}
-                                  </Badge>
-                                )}
-                                {Array.isArray(student?.productGenres) &&
-                                  getGenreLabels(student.productGenres.slice(0, 2)).map((genre, genreIndex) => (
-                                    <Badge
-                                      key={genreIndex}
-                                      className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20"
-                                    >
+                                {student?.profile?.idea_status && <Badge className="bg-[#FFD700)/10 text-[#B8860B] border-[#FFD700)/20">{getIdeaStatusLabel(student.profile.idea_status)}</Badge>}
+                                {Array.isArray(student?.product_genres) &&
+                                  getGenreLabels(student.product_genres.slice(0, 2)).map((genre, genreIndex) => (
+                                    <Badge key={genreIndex} className="bg-[#4CAF50)/10 text-[#2E7D32] border-[#4CAF50)/20">
                                       {genre}
                                     </Badge>
                                   ))}
-                                {Array.isArray(student?.productGenres) && student.productGenres.length > 2 && (
-                                  <Badge className="bg-gray-100 text-gray-600">
-                                    +{student.productGenres.length - 2}
-                                  </Badge>
-                                )}
+                                {Array.isArray(student?.product_genres) && student.product_genres.length > 2 && <Badge className="bg-gray-100 text-gray-600">+{student.product_genres.length - 2}</Badge>}
                               </div>
                             </div>
 
@@ -296,27 +346,33 @@ export default function SearchResultsScreen({ onNavigate, currentUser }: SearchR
                               <div className="flex items-center gap-2 text-sm text-[#6C757D]">
                                 <Clock className="w-3 h-3" />
                                 <div className="flex flex-wrap gap-1">
-                                  {Array.isArray(student?.weekdayTimes) &&
-                                    student.weekdayTimes.slice(0, 2).map((time: string, timeIndex: number) => (
-                                      <Badge key={timeIndex} variant="outline" className="text-xs">
-                                        {time}
-                                      </Badge>
-                                    ))}
-                                  {Array.isArray(student?.weekdayTimes) && student.weekdayTimes.length > 2 && (
+                                  {Array.isArray(student?.timeslots) &&
+                                    student.timeslots
+                                      .filter((time: any) => time.day_type === "weekday")
+                                      .slice(0, 2)
+                                      .map((time: any, timeIndex: number) => (
+                                        <Badge key={timeIndex} variant="outline" className="text-xs">
+                                          {time.description}
+                                        </Badge>
+                                      ))}
+                                  {Array.isArray(student?.timeslots) && student.timeslots.filter((time: any) => time.day_type === "weekday").length > 2 && (
                                     <Badge variant="outline" className="text-xs">
-                                      +{student.weekdayTimes.length - 2}
+                                      +{student.timeslots.filter((time: any) => time.day_type === "weekday").length - 2}
                                     </Badge>
                                   )}
                                   <span>•</span>
-                                  {Array.isArray(student?.weekendTimes) &&
-                                    student.weekendTimes.slice(0, 2).map((time: string, timeIndex: number) => (
-                                      <Badge key={timeIndex} variant="outline" className="text-xs">
-                                        {time}
-                                      </Badge>
-                                    ))}
-                                  {Array.isArray(student?.weekendTimes) && student.weekendTimes.length > 2 && (
+                                  {Array.isArray(student?.timeslots) &&
+                                    student.timeslots
+                                      .filter((time: any) => time.day_type === "weekend_holiday")
+                                      .slice(0, 2)
+                                      .map((time: any, timeIndex: number) => (
+                                        <Badge key={timeIndex} variant="outline" className="text-xs">
+                                          {time.description}
+                                        </Badge>
+                                      ))}
+                                  {Array.isArray(student?.timeslots) && student.timeslots.filter((time: any) => time.day_type === "weekend_holiday").length > 2 && (
                                     <Badge variant="outline" className="text-xs">
-                                      +{student.weekendTimes.length - 2}
+                                      +{student.timeslots.filter((time: any) => time.day_type === "weekend_holiday").length - 2}
                                     </Badge>
                                   )}
                                 </div>
@@ -324,10 +380,10 @@ export default function SearchResultsScreen({ onNavigate, currentUser }: SearchR
                             </div>
 
                             {/* こんな活動がしたい */}
-                            {student?.collaboration && (
+                            {student?.profile?.self_introduction_comment && (
                               <div className="mb-3">
-                                <div className="text-sm font-medium text-[#343A40] mb-1">こんな活動がしたい</div>
-                                <p className="text-sm text-[#6C757D] line-clamp-2">{student.collaboration}</p>
+                                <div className="text-sm font-medium text-[#343A40] mb-1">自己紹介・こんな活動がしたい</div>
+                                <p className="text-sm text-[#6C757D] line-clamp-2">{student.profile.self_introduction_comment}</p>
                               </div>
                             )}
                           </div>
@@ -342,5 +398,5 @@ export default function SearchResultsScreen({ onNavigate, currentUser }: SearchR
         )}
       </div>
     </div>
-  )
+  );
 }

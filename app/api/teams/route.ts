@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-// ★ 修正: lib/prisma.ts へのインポートパスをプロジェクト構造に合わせて修正
-// tsconfig.json の設定でエイリアスが使えるようになったため、短いエイリアスパスを使用
+// tsconfig.json の設定でエイリアスが使えるため、短いエイリアスパスを使用
 import prisma from "@/lib/prisma"; // @/lib/prisma は student-matching-app/lib/prisma を指す
 
 // チーム関連の型定義
@@ -45,8 +44,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "必須項目が不足しています" }, { status: 400 });
     }
 
-    // ★ 修正: モックデータを削除し、Prismaを使ってデータベースにチーム作成
-    // トランザクションを使ってチームとメンバーシップを同時に作成
     const newTeam = await prisma.$transaction(async (tx) => {
       const team = await tx.teams.create({
         data: {
@@ -57,12 +54,11 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // メンバーシップの作成
       const membershipData = member_ids.map((userId: number) => ({
         team_id: team.id,
         user_id: userId,
         // チーム作成者は creator_role を設定、それ以外はnullまたはデフォルト値
-        role_in_team: userId === member_ids[0] && creator_role ? creator_role : null, // 最初のメンバーをクリエイターと仮定
+        role_in_team: userId === member_ids[0] && creator_role ? creator_role : null,
       }));
 
       await tx.team_memberships.createMany({
@@ -87,7 +83,7 @@ export async function POST(request: NextRequest) {
       message: "チームが正常に作成されました",
     });
   } catch (error) {
-    console.error("チーム作成エラー:", error);
+    console.error("チーム作成エラー:", error); // エラーを詳細にログ出力
     return NextResponse.json({ success: false, error: "サーバーエラーが発生しました" }, { status: 500 });
   }
 }
@@ -103,14 +99,23 @@ export async function GET(request: NextRequest) {
 
     // userIdによるフィルタリング (現在参加しているチームのみ)
     if (userIdParam) {
-      const parsedUserId = parseInt(userIdParam, 10);
-      if (isNaN(parsedUserId)) {
-        return NextResponse.json({ success: false, error: "無効なユーザーIDです" }, { status: 400 });
+      let userId: number;
+
+      if (userIdParam === "current") {
+        // TODO: 実際の認証システムからログインしているユーザーのIDを取得する
+        // 現時点では仮のIDを使用
+        userId = 1; // ログインしているユーザーがID:1（田中太郎）であると仮定
+      } else {
+        userId = parseInt(userIdParam, 10);
+        if (isNaN(userId)) {
+          return NextResponse.json({ success: false, error: "無効なユーザーIDです" }, { status: 400 });
+        }
       }
+
       // team_membershipsを介してユーザーが所属しているチームをフィルタリング
       whereClause.team_memberships = {
         some: {
-          user_id: parsedUserId,
+          user_id: userId,
           left_at: null, // まだ離脱していないメンバー
         },
       };
@@ -125,7 +130,6 @@ export async function GET(request: NextRequest) {
       whereClause.course_step_id = parsedCourseStepId;
     }
 
-    // ★ 修正: モックデータを削除し、Prismaを使ってデータベースからチーム情報を取得
     const teams = await prisma.teams.findMany({
       where: whereClause,
       include: {
@@ -154,7 +158,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // データを整形 (モックデータに合わせて)
+    // データを整形
     const formattedTeams: TeamWithMembers[] = teams.map((team) => ({
       id: team.id,
       course_step_id: team.course_step_id,

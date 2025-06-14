@@ -1,161 +1,192 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Users, Plus, Calendar, User, ArrowLeft, CheckCircle, AlertCircle, X, ChevronsUpDown } from "lucide-react"
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// DialogDescription をインポートに追加
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Users, Plus, Calendar, User, ArrowLeft, CheckCircle, AlertCircle, X, ChevronsUpDown } from "lucide-react";
 
 interface TeamManagementScreenProps {
-  onNavigate: (screen: string) => void
+  onNavigate: (screen: string) => void;
 }
 
 // TeamMemberの型定義を修正
 interface TeamMember {
-  user_id: number
-  user_name: string
-  user_email: string
-  role_in_team: string | null
-  joined_at: string
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  role_in_team: string | null;
+  joined_at: string;
 }
 
 interface Team {
-  id: number
-  course_step_id: number
-  name: string
-  project_name: string | null
-  created_at: string
-  course_step_name: string
-  members: TeamMember[]
+  id: number;
+  course_step_id: number;
+  name: string;
+  project_name: string | null;
+  created_at: string;
+  course_step_name: string;
+  members: TeamMember[];
 }
 
 interface CourseStep {
-  id: number
-  name: string
-  start_date: string | null
-  end_date: string | null
+  id: number;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
 }
 
 interface UserOption {
-  id: number
-  name: string
-  email: string
-  role?: string | null
+  id: number;
+  name: string;
+  email: string;
+  role?: string | null;
 }
 
 export default function TeamManagementScreen({ onNavigate }: TeamManagementScreenProps) {
-  const [teams, setTeams] = useState<Team[]>([])
-  const [courseSteps, setCourseSteps] = useState<CourseStep[]>([])
-  const [selectedCourseStep, setSelectedCourseStep] = useState<number | null>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [courseSteps, setCourseSteps] = useState<CourseStep[]>([]);
+  const [selectedCourseStep, setSelectedCourseStep] = useState<number | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newTeam, setNewTeam] = useState({
     name: "",
     project_name: "",
     course_step_id: 0,
     creator_role: "",
-  })
-  const [selectedMembers, setSelectedMembers] = useState<UserOption[]>([])
-  const [userOptions, setUserOptions] = useState<UserOption[]>([])
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [errors, setErrors] = useState<string[]>([])
-  const [successMessage, setSuccessMessage] = useState("")
+  });
+  const [selectedMembers, setSelectedMembers] = useState<UserOption[]>([]);
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [successMessage, setSuccessMessage] = useState("");
 
   // データ読み込み
+  // TODO: `userId` を実際のログインユーザーのIDに置き換える
   useEffect(() => {
-    loadData()
-  }, [selectedCourseStep])
+    loadData();
+  }, [selectedCourseStep]);
 
   // ユーザー検索
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        // 既に選択されているユーザーIDを除外
-        const excludeIds = selectedMembers.map((member) => member.id).join(",")
-        const response = await fetch(`/api/users?query=${searchQuery}&excludeIds=${excludeIds}`)
+        // 既に選択されているユーザーIDを除外 - 安全な処理に修正
+        const excludeIds = Array.isArray(selectedMembers)
+          ? selectedMembers
+              .map((member) => member?.id)
+              .filter((id) => id !== undefined)
+              .join(",")
+          : "";
+
+        const response = await fetch(`/api/users?query=${encodeURIComponent(searchQuery)}&excludeIds=${excludeIds}`);
+
         if (response.ok) {
-          const data = await response.json()
-          if (data.success) {
+          const data = await response.json();
+          console.log("API Response:", data); // デバッグ用
+
+          // ★ 修正: data.users が存在し、配列であることを確認
+          if (data && data.success && data.users && Array.isArray(data.users)) {
             setUserOptions(
               data.users.map((user: any) => ({
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.profile?.desired_role_in_team || null,
-              })),
-            )
+                id: user?.id || 0,
+                name: user?.name || "Unknown",
+                email: user?.email || "",
+                role: user?.profile?.desired_role_in_team || null,
+              }))
+            );
+          } else {
+            // APIが成功を返したが、usersデータがない場合のエラーハンドリング
+            console.error("ユーザー検索APIエラー: 'users'データが不正です", data);
+            setUserOptions([]); // 無効なデータの場合は空にする
           }
+        } else {
+          console.error("ユーザー検索APIエラー:", response.status, response.statusText);
+          setUserOptions([]); // APIエラーの場合は空にする
         }
       } catch (error) {
-        console.error("ユーザー検索エラー:", error)
+        console.error("ユーザー検索エラー:", error);
+        setUserOptions([]); // ネットワークエラーなどの場合は空にする
       }
-    }
+    };
 
     if (isUserDropdownOpen) {
-      fetchUsers()
+      fetchUsers();
     }
-  }, [searchQuery, isUserDropdownOpen, selectedMembers])
+  }, [searchQuery, isUserDropdownOpen, selectedMembers]);
 
   // loadDataメソッドのエラーハンドリングを強化
   const loadData = async () => {
     try {
       // コース情報取得
-      const masterResponse = await fetch("/api/master-data")
+      const masterResponse = await fetch("/api/master-data");
       if (masterResponse.ok) {
-        const masterResult = await masterResponse.json()
-        if (masterResult.success) {
-          setCourseSteps(masterResult.data.courseSteps)
+        const masterResult = await masterResponse.json();
+        // ★ 修正: masterResult.data が存在し、必要なプロパティがあるか確認
+        if (masterResult.success && masterResult.data && masterResult.data.courseSteps) {
+          setCourseSteps(masterResult.data.courseSteps);
         } else {
-          console.error("マスターデータ取得エラー:", masterResult.error)
+          console.error("マスターデータ取得エラー: 'courseSteps'データが不正です", masterResult.error);
+          setCourseSteps([]); // 無効なデータの場合は空にする
         }
       } else {
-        console.error("マスターデータAPIエラー:", masterResponse.statusText)
+        console.error("マスターデータAPIエラー:", masterResponse.status, masterResponse.statusText);
+        setCourseSteps([]); // APIエラーの場合は空にする
       }
 
       // チーム情報取得 - 現在のユーザーが参加しているチームのみ
-      const params = new URLSearchParams()
-      params.append("userId", "current") // 現在のユーザーのチームのみ取得
+      const params = new URLSearchParams();
+      // TODO: ここを実際のログインユーザーのIDに置き換える
+      params.append("userId", "1"); // 仮のユーザーID。実際の認証後にログインユーザーのIDに置き換えること！
       if (selectedCourseStep) {
-        params.append("courseStepId", selectedCourseStep.toString())
+        params.append("courseStepId", selectedCourseStep.toString());
       }
 
-      const teamsResponse = await fetch(`/api/teams?${params}`)
+      const teamsResponse = await fetch(`/api/teams?${params}`);
       if (teamsResponse.ok) {
-        const teamsResult = await teamsResponse.json()
-        if (teamsResult.success) {
-          setTeams(teamsResult.teams)
+        const teamsResult = await teamsResponse.json();
+        // ★ 修正: teamsResult.teams が存在し、配列であることを確認
+        if (teamsResult.success && Array.isArray(teamsResult.teams)) {
+          setTeams(teamsResult.teams);
         } else {
-          console.error("チーム取得エラー:", teamsResult.error)
+          console.error("チーム取得エラー: 'teams'データが不正です", teamsResult.error);
+          setTeams([]); // 無効なデータの場合は空にする
         }
       } else {
-        console.error("チームAPIエラー:", teamsResponse.statusText)
+        console.error("チームAPIエラー:", teamsResponse.status, teamsResponse.statusText);
+        setTeams([]); // APIエラーの場合は空にする
       }
     } catch (error) {
-      console.error("データ読み込みエラー:", error)
+      console.error("データ読み込みエラー:", error);
+      setCourseSteps([]); // ネットワークエラーなどの場合は空にする
+      setTeams([]); // ネットワークエラーなどの場合は空にする
     }
-  }
+  };
 
   const handleCreateTeam = async () => {
-    setIsLoading(true)
-    setErrors([])
-    setSuccessMessage("")
+    setIsLoading(true);
+    setErrors([]);
+    setSuccessMessage("");
 
     try {
-      if (!newTeam.name || !newTeam.course_step_id || selectedMembers.length === 0) {
-        setErrors(["チーム名、コース、メンバーは必須です"])
-        setIsLoading(false)
-        return
+      const validMembers = Array.isArray(selectedMembers) ? selectedMembers : [];
+
+      if (!newTeam.name || !newTeam.course_step_id || validMembers.length === 0) {
+        setErrors(["チーム名、コース、メンバーは必須です"]);
+        setIsLoading(false);
+        return;
       }
 
-      const memberIds = selectedMembers.map((member) => member.id)
+      const memberIds = validMembers.filter((member) => member && member.id).map((member) => member.id);
 
       const response = await fetch("/api/teams", {
         method: "POST",
@@ -169,52 +200,62 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
           member_ids: memberIds,
           creator_role: newTeam.creator_role || null,
         }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (data.success) {
-        setSuccessMessage("チームが正常に作成されました")
-        setIsCreateDialogOpen(false)
+        setSuccessMessage("チームが正常に作成されました");
+        setIsCreateDialogOpen(false);
         setNewTeam({
           name: "",
           project_name: "",
           course_step_id: 0,
           creator_role: "",
-        })
-        setSelectedMembers([])
-        loadData()
+        });
+        setSelectedMembers([]);
+        loadData();
       } else {
-        setErrors([data.error || "チーム作成に失敗しました"])
+        setErrors([data.error || "チーム作成に失敗しました"]);
       }
     } catch (error) {
-      console.error("チーム作成エラー:", error)
-      setErrors(["ネットワークエラーが発生しました"])
+      console.error("チーム作成エラー:", error);
+      setErrors(["ネットワークエラーが発生しました"]);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleSelectMember = (user: UserOption) => {
-    setSelectedMembers([...selectedMembers, user])
-    setIsUserDropdownOpen(false)
-    setSearchQuery("")
-  }
+    if (!user || !user.id) return;
+
+    setSelectedMembers((prev) => {
+      const currentMembers = Array.isArray(prev) ? prev : [];
+      return [...currentMembers, user];
+    });
+    setIsUserDropdownOpen(false);
+    setSearchQuery("");
+  };
 
   const handleRemoveMember = (userId: number) => {
-    setSelectedMembers(selectedMembers.filter((member) => member.id !== userId))
-  }
+    if (!userId) return;
+
+    setSelectedMembers((prev) => {
+      const currentMembers = Array.isArray(prev) ? prev : [];
+      return currentMembers.filter((member) => member && member.id !== userId);
+    });
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("ja-JP", {
       year: "numeric",
       month: "short",
       day: "numeric",
-    })
-  }
+    });
+  };
 
   const getRoleLabel = (role: string | null) => {
-    if (!role) return null
+    if (!role) return null;
 
     const roleMap: Record<string, string> = {
       tech_lead: "Tech Lead",
@@ -224,10 +265,10 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
       pm_management: "PM",
       support_member: "サポート",
       no_preference: "未指定",
-    }
+    };
 
-    return roleMap[role] || role
-  }
+    return roleMap[role] || role;
+  };
 
   // teamsByStepの計算を修正
   const teamsByStep = courseSteps
@@ -235,21 +276,16 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
       return {
         step,
         teams: teams.filter((team) => team.course_step_id === step.id),
-      }
+      };
     })
-    .filter(({ teams }) => teams.length > 0) // 空のステップを除外
+    .filter(({ teams }) => teams.length > 0); // 空のステップを除外
 
   return (
     <div className="min-h-screen p-4 bg-[#F8F9FA]">
       <div className="max-w-6xl mx-auto">
         {/* ヘッダー */}
         <div className="flex items-center gap-4 mb-6">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => onNavigate("search-results")}
-            className="border-2 border-gray-300 hover:border-[#5D70F7]"
-          >
+          <Button variant="outline" size="icon" onClick={() => onNavigate("search-results")} className="border-2 border-gray-300 hover:border-[#5D70F7]">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex-1">
@@ -266,14 +302,13 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>新しいチーム作成</DialogTitle>
+                {/* ★ ここを追加 ★ */}
+                <DialogDescription>チームの詳細情報を入力し、メンバーを選択してください。</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium text-[#343A40]">ステップ選択</label>
-                  <Select
-                    value={newTeam.course_step_id.toString()}
-                    onValueChange={(value) => setNewTeam({ ...newTeam, course_step_id: Number.parseInt(value) })}
-                  >
+                  <Select value={newTeam.course_step_id.toString()} onValueChange={(value) => setNewTeam({ ...newTeam, course_step_id: Number.parseInt(value) })}>
                     <SelectTrigger>
                       <SelectValue placeholder="ステップを選択" />
                     </SelectTrigger>
@@ -289,83 +324,55 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
 
                 <div>
                   <label className="text-sm font-medium text-[#343A40]">チーム名</label>
-                  <Input
-                    placeholder="例: Team Alpha"
-                    value={newTeam.name}
-                    onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
-                  />
+                  <Input placeholder="例: Team Alpha" value={newTeam.name} onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })} />
                 </div>
 
                 <div>
                   <label className="text-sm font-medium text-[#343A40]">プロジェクト名（任意）</label>
-                  <Input
-                    placeholder="例: 学習管理システム"
-                    value={newTeam.project_name}
-                    onChange={(e) => setNewTeam({ ...newTeam, project_name: e.target.value })}
-                  />
+                  <Input placeholder="例: 学習管理システム" value={newTeam.project_name} onChange={(e) => setNewTeam({ ...newTeam, project_name: e.target.value })} />
                 </div>
 
                 <div>
                   <label className="text-sm font-medium text-[#343A40]">あなたの役割</label>
-                  <Input
-                    placeholder="例: Tech Lead, PM, Designer"
-                    value={newTeam.creator_role}
-                    onChange={(e) => setNewTeam({ ...newTeam, creator_role: e.target.value })}
-                  />
+                  <Input placeholder="例: Tech Lead, PM, Designer" value={newTeam.creator_role} onChange={(e) => setNewTeam({ ...newTeam, creator_role: e.target.value })} />
                 </div>
 
                 <div>
                   <label className="text-sm font-medium text-[#343A40]">メンバー選択</label>
 
                   {/* 選択済みメンバー表示 */}
-                  {selectedMembers.length > 0 && (
+                  {Array.isArray(selectedMembers) && selectedMembers.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2">
-                      {selectedMembers.map((member) => (
-                        <Badge key={member.id} variant="secondary" className="flex items-center gap-1 pl-2">
-                          {member.name}
-                          <button
-                            onClick={() => handleRemoveMember(member.id)}
-                            className="ml-1 rounded-full hover:bg-gray-200 p-0.5"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ))}
+                      {selectedMembers
+                        .filter((member) => member && member.id)
+                        .map((member) => (
+                          <Badge key={member.id} variant="secondary" className="flex items-center gap-1 pl-2">
+                            {member.name || "Unknown"}
+                            <button onClick={() => handleRemoveMember(member.id)} className="ml-1 rounded-full hover:bg-gray-200 p-0.5">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
                     </div>
                   )}
 
                   {/* メンバー検索・選択 */}
                   <Popover open={isUserDropdownOpen} onOpenChange={setIsUserDropdownOpen}>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={isUserDropdownOpen}
-                        className="w-full justify-between"
-                      >
+                      <Button variant="outline" role="combobox" aria-expanded={isUserDropdownOpen} className="w-full justify-between">
                         <span className="truncate">メンバーを追加</span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-full p-0">
                       <Command>
-                        <CommandInput
-                          placeholder="名前またはメールで検索..."
-                          value={searchQuery}
-                          onValueChange={setSearchQuery}
-                          className="h-9"
-                        />
+                        <CommandInput placeholder="名前またはメールで検索..." value={searchQuery} onValueChange={setSearchQuery} className="h-9" />
                         <CommandList>
                           <CommandEmpty>該当するユーザーがいません</CommandEmpty>
                           <CommandGroup>
                             <ScrollArea className="h-60">
                               {userOptions.map((user) => (
-                                <CommandItem
-                                  key={user.id}
-                                  value={user.id.toString()}
-                                  onSelect={() => handleSelectMember(user)}
-                                  className="flex items-center justify-between"
-                                >
+                                <CommandItem key={user.id} value={user.id.toString()} onSelect={() => handleSelectMember(user)} className="flex items-center justify-between">
                                   <div className="flex flex-col">
                                     <span>{user.name}</span>
                                     <span className="text-xs text-gray-500">{user.email}</span>
@@ -396,11 +403,7 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                   </Alert>
                 )}
 
-                <Button
-                  onClick={handleCreateTeam}
-                  disabled={isLoading}
-                  className="w-full bg-[#4CAF50] hover:bg-[#45A049]"
-                >
+                <Button onClick={handleCreateTeam} disabled={isLoading} className="w-full bg-[#4CAF50] hover:bg-[#45A049]">
                   {isLoading ? "作成中..." : "チーム作成"}
                 </Button>
               </div>
@@ -421,15 +424,11 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
           <CardContent className="p-4">
             <div className="flex items-center gap-4">
               <label className="text-sm font-medium text-[#343A40]">ステップで絞り込み:</label>
-              <Select
-                value={selectedCourseStep?.toString() || "all"}
-                onValueChange={(value) => setSelectedCourseStep(value === "all" ? null : Number.parseInt(value))}
-              >
+              <Select value={selectedCourseStep?.toString() || "all"} onValueChange={(value) => setSelectedCourseStep(value === "all" ? null : Number.parseInt(value))}>
                 <SelectTrigger className="w-64">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">すべてのステップ</SelectItem>
                   {courseSteps.map((course) => (
                     <SelectItem key={course.id} value={course.id.toString()}>
                       {course.name}
@@ -462,11 +461,7 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                           {team.name}
                         </CardTitle>
                         <div className="flex items-center gap-4 mt-2">
-                          {team.project_name && (
-                            <Badge className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20 text-xs">
-                              {team.project_name}
-                            </Badge>
-                          )}
+                          {team.project_name && <Badge className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20 text-xs">{team.project_name}</Badge>}
                           <div className="flex items-center gap-1 text-xs text-[#6C757D]">
                             <Calendar className="w-3 h-3" />
                             {formatDate(team.created_at)}
@@ -479,10 +474,7 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                     <div className="space-y-3">
                       <h3 className="text-sm font-medium text-[#343A40]">メンバー ({team.members.length}人)</h3>
                       {team.members.map((member) => (
-                        <div
-                          key={member.user_id}
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                        >
+                        <div key={member.user_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-gradient-to-br from-[#5D70F7] to-[#38C9B9] rounded-full flex items-center justify-center">
                               <User className="w-4 h-4 text-white" />
@@ -537,11 +529,7 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                                 {team.name}
                               </CardTitle>
                               <div className="flex items-center gap-4 mt-2">
-                                {team.project_name && (
-                                  <Badge className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20 text-xs">
-                                    {team.project_name}
-                                  </Badge>
-                                )}
+                                {team.project_name && <Badge className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20 text-xs">{team.project_name}</Badge>}
                                 <div className="flex items-center gap-1 text-xs text-[#6C757D]">
                                   <Calendar className="w-3 h-3" />
                                   {formatDate(team.created_at)}
@@ -554,10 +542,7 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                           <div className="space-y-3">
                             <h3 className="text-sm font-medium text-[#343A40]">メンバー ({team.members.length}人)</h3>
                             {team.members.map((member) => (
-                              <div
-                                key={member.user_id}
-                                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                              >
+                              <div key={member.user_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                 <div className="flex items-center gap-3">
                                   <div className="w-8 h-8 bg-gradient-to-br from-[#5D70F7] to-[#38C9B9] rounded-full flex items-center justify-center">
                                     <User className="w-4 h-4 text-white" />
@@ -588,5 +573,5 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
         )}
       </div>
     </div>
-  )
+  );
 }
