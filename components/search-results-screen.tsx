@@ -330,12 +330,12 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
                               <div className="text-sm font-medium text-[#343A40] mb-1">アイデア状況・興味ジャンル</div>
                               <div className="flex flex-wrap gap-1">
                                 {student?.profile?.idea_status && <Badge className="bg-[#FFD700)/10 text-[#B8860B] border-[#FFD700)/20">{getIdeaStatusLabel(student.profile.idea_status)}</Badge>}
-                                {Array.isArray(student?.product_genres) &&
-                                  getGenreLabels(student.product_genres.slice(0, 2)).map((genre, genreIndex) => (
-                                    <Badge key={genreIndex} className="bg-[#4CAF50)/10 text-[#2E7D32] border-[#4CAF50)/20">
-                                      {genre}
-                                    </Badge>
-                                  ))}
+{Array.isArray(student?.product_genres) &&
+ student.product_genres.slice(0, 2).map((genreObj, idx) => (
+   <Badge key={idx} className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20">
+     {genreObj.name}
+   </Badge>
+ ))}  
                                 {Array.isArray(student?.product_genres) && student.product_genres.length > 2 && <Badge className="bg-gray-100 text-gray-600">+{student.product_genres.length - 2}</Badge>}
                               </div>
                             </div>
