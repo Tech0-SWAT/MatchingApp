@@ -1,9 +1,4 @@
-// prisma/seed.ts
-
-require("dotenv").config({ path: "./.env" });
-
-const { PrismaClient } = require("@prisma/client");
-const bcrypt = require("bcryptjs");
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -11,180 +6,347 @@ async function main() {
   console.log("Seeding database...");
   console.log("DATABASE_URL being used by seed script:", process.env.DATABASE_URL);
 
-  // 既存のデータを削除（冪等性を保つため、毎回実行できるように）
-  await prisma.team_memberships.deleteMany({});
-  await prisma.teams.deleteMany({});
-  await prisma.course_steps.deleteMany({});
-  await prisma.user_product_genres.deleteMany({});
-  await prisma.user_availabilities.deleteMany({});
-  await prisma.user_team_priorities.deleteMany({});
-  await prisma.user_profiles.deleteMany({});
-  await prisma.users.deleteMany({});
-  await prisma.product_genres.deleteMany({});
-  await prisma.availability_timeslots.deleteMany({});
-  await prisma.team_priorities.deleteMany({});
-  await prisma.match_results.deleteMany({}); // マッチング結果もクリア
+  try {
+    // 削除部分をコメントアウト（既存データを保持）
+    /*
+    // Delete in reverse dependency order to avoid foreign key constraint violations
+    await prisma.match_results.deleteMany({});
+    await prisma.team_memberships.deleteMany({});
+    await prisma.user_availabilities.deleteMany({});
+    await prisma.user_team_priorities.deleteMany({});
+    await prisma.user_product_genres.deleteMany({});
+    await prisma.user_profiles.deleteMany({});
+    await prisma.teams.deleteMany({});
+    await prisma.users.deleteMany({});
 
-  const hashedPassword1 = await bcrypt.hash("Soarainori1", 10);
-  const hashedPassword2 = await bcrypt.hash("password_sato", 10);
-  const hashedPassword3 = await bcrypt.hash("password_suzuki", 10);
-  const hashedPassword4 = await bcrypt.hash("password_yamada", 10);
-  const hashedPassword5 = await bcrypt.hash("password_ito", 10);
-  const hashedPassword6 = await bcrypt.hash("password_takahashi", 10);
+    // Delete reference tables
+    await prisma.availability_timeslots.deleteMany({});
+    await prisma.team_priorities.deleteMany({});
+    await prisma.product_genres.deleteMany({});
+    await prisma.course_steps.deleteMany({});
 
-  const user1 = await prisma.users.create({ data: { id: 1, name: "田中 太郎", email: "tanaka@example.com", password_hash: hashedPassword1 } });
-  const user2 = await prisma.users.create({ data: { id: 2, name: "佐藤 花子", email: "sato@example.com", password_hash: hashedPassword2 } });
-  const user3 = await prisma.users.create({ data: { id: 3, name: "鈴木 次郎", email: "suzuki@example.com", password_hash: hashedPassword3 } });
-  const user4 = await prisma.users.create({ data: { id: 4, name: "山田 美咲", email: "yamada@example.com", password_hash: hashedPassword4 } });
-  const user5 = await prisma.users.create({ data: { id: 5, name: "伊藤 健太", email: "ito@example.com", password_hash: hashedPassword5 } });
-  const user6 = await prisma.users.create({ data: { id: 6, name: "高橋 優子", email: "takahashi@example.com", password_hash: hashedPassword6 } });
+    console.log('Database cleared successfully');
+    */
 
-  await prisma.user_profiles.createMany({
-    data: [
-      { user_id: user1.id, personality_type: "INTJ", idea_status: "concrete", desired_role_in_team: "tech", self_introduction_comment: "機械学習エンジニアとして3年の経験があります。特にディープラーニングを用いた画像解析が得意です。" },
-      { user_id: user2.id, personality_type: "ENFP", idea_status: "rough", desired_role_in_team: "design", self_introduction_comment: "フロントエンド開発とUXデザインの両方を手がけています。ユーザーの声を大切にしたプロダクト作りを心がけています。" },
-      { user_id: user3.id, personality_type: "ISTJ", idea_status: "participate", desired_role_in_team: "tech", self_introduction_comment: "バックエンド開発が得意です。堅実な開発を心がけています。" },
-      { user_id: user4.id, personality_type: "ENFJ", idea_status: "rough", desired_role_in_team: "biz", self_introduction_comment: "プロジェクトマネジメント経験豊富です。チームをまとめて成果を出すのが好きです。" },
-      { user_id: user5.id, personality_type: "ESTP", idea_status: "concrete", desired_role_in_team: "biz", self_introduction_comment: "新規事業立ち上げに興味があります。ビジネスサイドからプロダクトを考えたいです。" },
-      { user_id: user6.id, personality_type: "INFP", idea_status: "rough", desired_role_in_team: null, self_introduction_comment: "チーム開発のサポートやドキュメント作成が得意です。" },
-    ],
-  });
+    // 1. Create reference data first
 
-  const genre1 = await prisma.product_genres.create({ data: { id: 1, name: "業務効率化・SaaS" } });
-  const genre2 = await prisma.product_genres.create({ data: { id: 2, name: "教育・学習支援" } });
-  const genre3 = await prisma.product_genres.create({ data: { id: 3, name: "ヘルスケア・ウェルネス" } });
-  const genre4 = await prisma.product_genres.create({ data: { id: 4, name: "エンターテイメント・ゲーム" } });
-  const genre5 = await prisma.product_genres.create({ data: { id: 5, name: "Eコマース・マーケットプレイス" } });
-  const genre6 = await prisma.product_genres.create({ data: { id: 6, name: "コミュニケーション・SNS" } });
-  const genre7 = await prisma.product_genres.create({ data: { id: 7, name: "AI・機械学習を活用したプロダクト" } });
-  const genre8 = await prisma.product_genres.create({ data: { id: 8, name: "ソーシャルグッド・地域活性化" } });
-  const genre9 = await prisma.product_genres.create({ data: { id: 9, name: "ジャンルには特にこだわらない" } });
+    // Create product genres
+    const productGenres = await Promise.all([
+      prisma.product_genres.create({
+        data: {
+          name: "Webアプリケーション",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.product_genres.create({
+        data: {
+          name: "モバイルアプリ",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.product_genres.create({
+        data: {
+          name: "AI・機械学習",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+    ]);
 
-  await prisma.user_product_genres.createMany({
-    data: [
-      { user_id: user1.id, product_genre_id: genre7.id },
-      { user_id: user1.id, product_genre_id: genre8.id },
-      { user_id: user1.id, product_genre_id: genre3.id },
-      { user_id: user2.id, product_genre_id: genre2.id },
-      { user_id: user2.id, product_genre_id: genre6.id },
-      { user_id: user2.id, product_genre_id: genre9.id },
-      { user_id: user3.id, product_genre_id: genre1.id },
-      { user_id: user3.id, product_genre_id: genre5.id },
-      { user_id: user4.id, product_genre_id: genre2.id },
-      { user_id: user4.id, product_genre_id: genre4.id },
-      { user_id: user5.id, product_genre_id: genre1.id },
-      { user_id: user5.id, product_genre_id: genre9.id },
-    ],
-  });
+    console.log("Product genres created:", productGenres.length);
 
-  const ts1 = await prisma.availability_timeslots.create({ data: { id: 1, description: "平日 朝5時～7時", day_type: "weekday", sort_order: 1 } });
-  const ts2 = await prisma.availability_timeslots.create({ data: { id: 2, description: "平日 7時～9時", day_type: "weekday", sort_order: 2 } });
-  const ts3 = await prisma.availability_timeslots.create({ data: { id: 3, description: "平日 18時～20時", day_type: "weekday", sort_order: 3 } });
-  const ts4 = await prisma.availability_timeslots.create({ data: { id: 4, description: "平日 20時～22時", day_type: "weekday", sort_order: 4 } });
-  const ts5 = await prisma.availability_timeslots.create({ data: { id: 5, description: "平日 22時～24時", day_type: "weekday", sort_order: 5 } });
-  const ts6 = await prisma.availability_timeslots.create({ data: { id: 6, description: "平日 いつでも良い", day_type: "weekday", sort_order: 6 } });
-  const ts7 = await prisma.availability_timeslots.create({ data: { id: 7, description: "平日 特に希望なし", day_type: "weekday", sort_order: 7 } });
-  const ts8 = await prisma.availability_timeslots.create({ data: { id: 8, description: "土日祝 0時～2時", day_type: "weekend_holiday", sort_order: 1 } });
-  const ts9 = await prisma.availability_timeslots.create({ data: { id: 9, description: "土日祝 2時～4時", day_type: "weekend_holiday", sort_order: 2 } });
-  const ts10 = await prisma.availability_timeslots.create({ data: { id: 10, description: "土日祝 4時～6時", day_type: "weekend_holiday", sort_order: 3 } });
-  const ts11 = await prisma.availability_timeslots.create({ data: { id: 11, description: "土日祝 6時～8時", day_type: "weekend_holiday", sort_order: 4 } });
-  const ts12 = await prisma.availability_timeslots.create({ data: { id: 12, description: "土日祝 8時～10時", day_type: "weekend_holiday", sort_order: 5 } });
-  const ts13 = await prisma.availability_timeslots.create({ data: { id: 13, description: "土日祝 10時～12時", day_type: "weekend_holiday", sort_order: 6 } });
-  const ts14 = await prisma.availability_timeslots.create({ data: { id: 14, description: "土日祝 12時～14時", day_type: "weekend_holiday", sort_order: 7 } });
-  const ts15 = await prisma.availability_timeslots.create({ data: { id: 15, description: "土日祝 14時～16時", day_type: "weekend_holiday", sort_order: 8 } });
-  const ts16 = await prisma.availability_timeslots.create({ data: { id: 16, description: "土日祝 16時～18時", day_type: "weekend_holiday", sort_order: 9 } });
-  const ts17 = await prisma.availability_timeslots.create({ data: { id: 17, description: "土日祝 18時～20時", day_type: "weekend_holiday", sort_order: 10 } });
-  const ts18 = await prisma.availability_timeslots.create({ data: { id: 18, description: "土日祝 20時～22時", day_type: "weekend_holiday", sort_order: 11 } });
-  const ts19 = await prisma.availability_timeslots.create({ data: { id: 19, description: "土日祝 22時～24時", day_type: "weekend_holiday", sort_order: 12 } });
-  const ts20 = await prisma.availability_timeslots.create({ data: { id: 20, description: "土日祝 いつでも良い", day_type: "weekend_holiday", sort_order: 13 } });
-  const ts21 = await prisma.availability_timeslots.create({ data: { id: 21, description: "土日祝 特に希望なし", day_type: "weekend_holiday", sort_order: 14 } });
+    // Create availability timeslots
+    const timeslots = await Promise.all([
+      prisma.availability_timeslots.create({
+        data: {
+          description: "平日午前",
+          day_type: "weekday",
+          sort_order: 1,
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.availability_timeslots.create({
+        data: {
+          description: "平日午後",
+          day_type: "weekday",
+          sort_order: 2,
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.availability_timeslots.create({
+        data: {
+          description: "週末",
+          day_type: "weekend_holiday",
+          sort_order: 3,
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+    ]);
 
-  // -----------------------------------------------------
-  // 6. user_availabilities Table
-  // -----------------------------------------------------
-  await prisma.user_availabilities.createMany({
-    data: [
-      { user_id: user1.id, timeslot_id: ts4.id },
-      { user_id: user1.id, timeslot_id: ts5.id },
-      { user_id: user1.id, timeslot_id: ts12.id },
-      { user_id: user1.id, timeslot_id: ts13.id },
-      { user_id: user2.id, timeslot_id: ts3.id },
-      { user_id: user2.id, timeslot_id: ts15.id },
-      { user_id: user2.id, timeslot_id: ts16.id },
-      { user_id: user2.id, timeslot_id: ts17.id },
-      { user_id: user3.id, timeslot_id: ts1.id },
-      { user_id: user3.id, timeslot_id: ts2.id },
-      { user_id: user3.id, timeslot_id: ts8.id },
-      { user_id: user4.id, timeslot_id: ts6.id },
-      { user_id: user4.id, timeslot_id: ts20.id },
-      { user_id: user5.id, timeslot_id: ts4.id },
-      { user_id: user5.id, timeslot_id: ts14.id },
-    ],
-  });
+    console.log("Timeslots created:", timeslots.length);
 
-  // -----------------------------------------------------
-  // 7. team_priorities Table
-  // -----------------------------------------------------
-  const tp1 = await prisma.team_priorities.create({ data: { id: 1, name: "スピード感を持ってどんどん進めたい" } });
-  const tp2 = await prisma.team_priorities.create({ data: { id: 2, name: "じっくり議論し、品質を重視したい" } });
-  const tp3 = await prisma.team_priorities.create({ data: { id: 3, name: "和気あいあいとした雰囲気で楽しく" } });
-  const tp4 = await prisma.team_priorities.create({ data: { id: 4, name: "目標達成に向けてストイックに" } });
-  const tp5 = await prisma.team_priorities.create({ data: { id: 5, name: "オンラインミーティングを頻繁に行いたい" } });
-  const tp6 = await prisma.team_priorities.create({ data: { id: 6, name: "非同期コミュニケーション（チャット等）中心で柔軟に" } });
-  const tp7 = await prisma.team_priorities.create({ data: { id: 7, name: "新しい技術やツールに積極的に挑戦したい" } });
-  const tp8 = await prisma.team_priorities.create({ data: { id: 8, name: "まずは手堅く、実績のある技術で" } });
+    // Create team priorities
+    const teamPriorities = await Promise.all([
+      prisma.team_priorities.create({
+        data: {
+          name: "学習重視",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.team_priorities.create({
+        data: {
+          name: "成果重視",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.team_priorities.create({
+        data: {
+          name: "バランス型",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+    ]);
 
-  // -----------------------------------------------------
-  // 8. user_team_priorities Table
-  // -----------------------------------------------------
-  await prisma.user_team_priorities.createMany({
-    data: [
-      { user_id: user1.id, team_priority_id: tp1.id },
-      { user_id: user1.id, team_priority_id: tp7.id },
-      { user_id: user2.id, team_priority_id: tp3.id },
-      { user_id: user2.id, team_priority_id: tp2.id },
-      { user_id: user3.id, team_priority_id: tp4.id },
-      { user_id: user3.id, team_priority_id: tp8.id },
-      { user_id: user4.id, team_priority_id: tp3.id },
-      { user_id: user4.id, team_priority_id: tp5.id },
-      { user_id: user5.id, team_priority_id: tp1.id },
-      { user_id: user5.id, team_priority_id: tp7.id },
-    ],
-  });
+    console.log("Team priorities created:", teamPriorities.length);
 
-  // -----------------------------------------------------
-  // 9. course_steps Table (Step 1, 2, 3 のみを作成)
-  const cs1 = await prisma.course_steps.create({ data: { id: 1, name: "Step 1", start_date: new Date("2024-04-01"), end_date: new Date("2024-06-30"), description: "基礎学習ステップ" } });
-  const cs2 = await prisma.course_steps.create({ data: { id: 2, name: "Step 2", start_date: new Date("2024-07-01"), end_date: new Date("2024-09-30"), description: "応用学習ステップ" } });
-  const cs3 = await prisma.course_steps.create({ data: { id: 3, name: "Step 3", start_date: new Date("2024-10-01"), end_date: new Date("2024-12-31"), description: "実践学習ステップ" } });
+    // Create course steps
+    const courseSteps = await Promise.all([
+      prisma.course_steps.create({
+        data: {
+          name: "Step 1: 基礎学習",
+          start_date: new Date("2024-04-01"),
+          end_date: new Date("2024-05-31"),
+          description: "プログラミング基礎とチーム開発の基礎を学ぶ",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.course_steps.create({
+        data: {
+          name: "Step 2: 実践開発",
+          start_date: new Date("2024-06-01"),
+          end_date: new Date("2024-07-31"),
+          description: "チームでの実践的な開発プロジェクト",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+    ]);
 
-  // -----------------------------------------------------
-  // 10. teams Table (関連する course_step_id を Step 1, 2, 3 のみに修正)
-  const team4 = await prisma.teams.create({ data: { id: 4, course_step_id: cs1.id, name: "現行チームX", project_name: "学習管理システム" } });
-  const team5 = await prisma.teams.create({ data: { id: 5, course_step_id: cs2.id, name: "現行チームY", project_name: "AIチャットボット" } });
-  const team6 = await prisma.teams.create({ data: { id: 6, course_step_id: cs3.id, name: "現行チームZ", project_name: "モバイルアプリ" } });
+    console.log("Course steps created:", courseSteps.length);
 
-  // -----------------------------------------------------
-  // 11. team_memberships Table (関連する team_id を現行チームのみに修正)
-  await prisma.team_memberships.createMany({
-    data: [
-      // 現行チームX (course_step_id = 1)
-      { id: 7, team_id: team4.id, user_id: user1.id, role_in_team: "tech", joined_at: new Date() },
-      { id: 8, team_id: team4.id, user_id: user2.id, role_in_team: "design", joined_at: new Date() },
-      { id: 9, team_id: team4.id, user_id: user3.id, role_in_team: "tech", joined_at: new Date() },
+    // 2. Create users
+    const users = await Promise.all([
+      prisma.users.create({
+        data: {
+          email: "alice@example.com",
+          name: "Alice Johnson",
+          password_hash: "dummy_hash_1",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.users.create({
+        data: {
+          email: "bob@example.com",
+          name: "Bob Smith",
+          password_hash: "dummy_hash_2",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.users.create({
+        data: {
+          email: "charlie@example.com",
+          name: "Charlie Brown",
+          password_hash: "dummy_hash_3",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+    ]);
 
-      // 現行チームY (course_step_id = 2)
-      { id: 10, team_id: team5.id, user_id: user1.id, role_in_team: "tech", joined_at: new Date() },
-      { id: 11, team_id: team5.id, user_id: user4.id, role_in_team: "biz", joined_at: new Date() },
+    console.log("Users created:", users.length);
 
-      // 現行チームZ (course_step_id = 3)
-      { id: 12, team_id: team6.id, user_id: user1.id, role_in_team: "tech", joined_at: new Date() },
-      { id: 13, team_id: team6.id, user_id: user5.id, role_in_team: "biz", joined_at: new Date() },
-      { id: 14, team_id: team6.id, user_id: user6.id, role_in_team: null, joined_at: new Date() },
-    ],
-  });
+    // 3. Create user profiles
+    const profiles = await Promise.all([
+      prisma.user_profiles.create({
+        data: {
+          user_id: users[0].id,
+          personality_type: "ENFP",
+          idea_status: "アイデアあり",
+          desired_role_in_team: "フロントエンド",
+          self_introduction_comment: "React と TypeScript が得意です。UI/UX にも興味があります。",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.user_profiles.create({
+        data: {
+          user_id: users[1].id,
+          personality_type: "INTJ",
+          idea_status: "アイデア募集中",
+          desired_role_in_team: "バックエンド",
+          self_introduction_comment: "Python と Django でのAPI開発が得意です。",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.user_profiles.create({
+        data: {
+          user_id: users[2].id,
+          personality_type: "ISFJ",
+          idea_status: "アイデアあり",
+          desired_role_in_team: "デザイナー",
+          self_introduction_comment: "Figma を使ったUI設計とプロトタイピングが得意です。",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+    ]);
 
-  console.log("Seeding finished.");
+    console.log("User profiles created:", profiles.length);
+
+    // 4. Create teams
+    const teams = await Promise.all([
+      prisma.teams.create({
+        data: {
+          course_step_id: courseSteps[1].id, // Step 2: 実践開発
+          name: "Team Alpha",
+          project_name: "AIチャットボット",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.teams.create({
+        data: {
+          course_step_id: courseSteps[1].id,
+          name: "Team Beta",
+          project_name: "ECサイト",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+    ]);
+
+    console.log("Teams created:", teams.length);
+
+    // 5. Create team memberships
+    const memberships = await Promise.all([
+      prisma.team_memberships.create({
+        data: {
+          team_id: teams[0].id,
+          user_id: users[0].id,
+          role_in_team: "リーダー",
+          joined_at: new Date(),
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.team_memberships.create({
+        data: {
+          team_id: teams[1].id,
+          user_id: users[1].id,
+          role_in_team: "リーダー",
+          joined_at: new Date(),
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      prisma.team_memberships.create({
+        data: {
+          team_id: teams[1].id,
+          user_id: users[2].id,
+          role_in_team: "デザイナー",
+          joined_at: new Date(),
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+    ]);
+
+    console.log("Team memberships created:", memberships.length);
+
+    // 6. Create user availabilities
+    const availabilities = await Promise.all([
+      prisma.user_availabilities.create({
+        data: {
+          user_id: users[0].id,
+          timeslot_id: timeslots[0].id, // 平日午前
+          created_at: new Date(),
+        },
+      }),
+      prisma.user_availabilities.create({
+        data: {
+          user_id: users[1].id,
+          timeslot_id: timeslots[1].id, // 平日午後
+          created_at: new Date(),
+        },
+      }),
+      prisma.user_availabilities.create({
+        data: {
+          user_id: users[2].id,
+          timeslot_id: timeslots[2].id, // 週末
+          created_at: new Date(),
+        },
+      }),
+    ]);
+
+    console.log("User availabilities created:", availabilities.length);
+
+    // 7. Create user product genres
+    const userProductGenres = await Promise.all([
+      prisma.user_product_genres.create({
+        data: {
+          user_id: users[0].id,
+          product_genre_id: productGenres[0].id, // Webアプリケーション
+          created_at: new Date(),
+        },
+      }),
+      prisma.user_product_genres.create({
+        data: {
+          user_id: users[1].id,
+          product_genre_id: productGenres[2].id, // AI・機械学習
+          created_at: new Date(),
+        },
+      }),
+    ]);
+
+    console.log("User product genres created:", userProductGenres.length);
+
+    // 8. Create user team priorities
+    const userTeamPriorities = await Promise.all([
+      prisma.user_team_priorities.create({
+        data: {
+          user_id: users[0].id,
+          team_priority_id: teamPriorities[2].id, // バランス型
+          created_at: new Date(),
+        },
+      }),
+      prisma.user_team_priorities.create({
+        data: {
+          user_id: users[1].id,
+          team_priority_id: teamPriorities[1].id, // 成果重視
+          created_at: new Date(),
+        },
+      }),
+    ]);
+
+    console.log("User team priorities created:", userTeamPriorities.length);
+
+    console.log("Database seeded successfully!");
+  } catch (error) {
+    console.error("Error during seeding:", error);
+    throw error;
+  }
 }
 
 main()
