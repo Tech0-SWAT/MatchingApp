@@ -85,6 +85,8 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
     ...initialCurrentUser, // 他のプロパティも保持
   };
 
+  console.log("CurrentUser in SearchResultsScreen:", currentUser);
+
   const handleStartMatching = async () => {
     setIsLoading(true);
     setErrors([]);
@@ -184,11 +186,21 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
     return idea ? idea.label : status;
   };
 
-  const getGenreLabels = (genres: string[]) => {
+  // 🔧 修正済み: オブジェクト配列と文字列配列の両方に対応
+  const getGenreLabels = (genres: any[]) => {
     if (!Array.isArray(genres)) return [];
     return genres.map((genre) => {
-      const found = productGenres.find((g) => g.value === genre);
-      return found ? found.label : genre;
+      // genreがオブジェクトの場合とstring の場合に対応
+      if (typeof genre === "object" && genre !== null) {
+        // オブジェクトの場合、value プロパティまたは name プロパティを使用
+        const genreValue = genre.value || genre.name || genre.id;
+        const found = productGenres.find((g) => g.value === genreValue);
+        return found ? found.label : String(genreValue);
+      } else {
+        // 文字列の場合
+        const found = productGenres.find((g) => g.value === genre);
+        return found ? found.label : String(genre);
+      }
     });
   };
 
@@ -329,13 +341,13 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
                             <div className="mb-3">
                               <div className="text-sm font-medium text-[#343A40] mb-1">アイデア状況・興味ジャンル</div>
                               <div className="flex flex-wrap gap-1">
-                                {student?.profile?.idea_status && <Badge className="bg-[#FFD700)/10 text-[#B8860B] border-[#FFD700)/20">{getIdeaStatusLabel(student.profile.idea_status)}</Badge>}
-{Array.isArray(student?.product_genres) &&
- student.product_genres.slice(0, 2).map((genreObj, idx) => (
-   <Badge key={idx} className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20">
-     {genreObj.name}
-   </Badge>
- ))}  
+                                {student?.profile?.idea_status && <Badge className="bg-[#FFD700]/10 text-[#B8860B] border-[#FFD700]/20">{getIdeaStatusLabel(student.profile.idea_status)}</Badge>}
+                                {Array.isArray(student?.product_genres) &&
+                                  getGenreLabels(student.product_genres.slice(0, 2)).map((genre, genreIndex) => (
+                                    <Badge key={genreIndex} className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20">
+                                      {String(genre)}
+                                    </Badge>
+                                  ))}
                                 {Array.isArray(student?.product_genres) && student.product_genres.length > 2 && <Badge className="bg-gray-100 text-gray-600">+{student.product_genres.length - 2}</Badge>}
                               </div>
                             </div>
