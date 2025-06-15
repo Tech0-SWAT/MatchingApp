@@ -49,6 +49,20 @@ interface UserOption {
   role?: string | null;
 }
 
+interface SelectedTeamMember {
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  role_in_team: string | null;
+}
+
+const createTeamRoleOptions = [
+  { value: "unspecified", label: "役割を選択" },
+  { value: "biz", label: "Biz" },
+  { value: "tech", label: "Tech" },
+  { value: "design", label: "Design" },
+];
+
 export default function TeamManagementScreen({ onNavigate }: TeamManagementScreenProps) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [courseSteps, setCourseSteps] = useState<CourseStep[]>([]);
@@ -57,10 +71,10 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
   const [newTeam, setNewTeam] = useState({
     name: "",
     project_name: "",
-    course_step_id: 0,
-    creator_role: "",
+    course_step_id: null as number | null,
+    creator_role: "unspecified",
   });
-  const [selectedMembers, setSelectedMembers] = useState<UserOption[]>([]);
+  const [selectedMembers, setSelectedMembers] = useState<SelectedTeamMember[]>([]);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -77,7 +91,7 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
       try {
         const excludeIds = Array.isArray(selectedMembers)
           ? selectedMembers
-              .map((member) => member?.id)
+              .map((member) => member?.user_id)
               .filter((id) => id !== undefined)
               .join(",")
           : "";
@@ -86,8 +100,6 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
 
         if (response.ok) {
           const data = await response.json();
-          console.log("API Response:", data);
-
           if (data && data.success && data.users && Array.isArray(data.users)) {
             setUserOptions(
               data.users.map((user: any) => ({
@@ -141,14 +153,36 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
       const teamsResponse = await fetch(`/api/teams?${params}`);
       if (teamsResponse.ok) {
         const teamsResult = await teamsResponse.json();
+
+        console.log("🌐 Teams API Response:", {
+          success: teamsResult.success,
+          teamsCount: teamsResult.teams?.length || 0,
+          fullResponse: teamsResult,
+        });
+
         if (teamsResult.success && Array.isArray(teamsResult.teams)) {
+          teamsResult.teams.forEach((team: any, index: number) => {
+            console.log(`👥 Team ${index + 1}: ${team.name}`);
+            if (team.members && Array.isArray(team.members)) {
+              team.members.forEach((member: any, mIndex: number) => {
+                console.log(`  👤 Member ${mIndex + 1}:`, {
+                  name: member.user_name,
+                  email: member.user_email,
+                  role_in_team: member.role_in_team,
+                  role_type: typeof member.role_in_team,
+                  role_json: JSON.stringify(member.role_in_team),
+                });
+              });
+            }
+          });
+
           setTeams(teamsResult.teams);
         } else {
-          console.error("チーム取得エラー: 'teams'データが不正です", teamsResult.error);
+          console.error("❌ Teams data invalid:", teamsResult);
           setTeams([]);
         }
       } else {
-        console.error("チームAPIエラー:", teamsResponse.status, teamsResponse.statusText);
+        console.error("❌ Teams API error:", teamsResponse.status);
         setTeams([]);
       }
     } catch (error) {
@@ -191,36 +225,122 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
   };
 
   const handleCreateTeam = async () => {
+    console.log("🚀 チーム作成ボタンがクリックされました！");
+    console.log("🔄 Loading状態を設定中...");
+
     setIsLoading(true);
     setErrors([]);
     setSuccessMessage("");
 
     try {
-      const validMembers = Array.isArray(selectedMembers) ? selectedMembers : [];
+      console.log("=== VALIDATION DEBUG START ===");
+      console.log("newTeam:", newTeam);
+      console.log("selectedMembers:", selectedMembers);
+      console.log("newTeam.name.trim():", `"${newTeam.name.trim()}"`);
+      console.log("newTeam.course_step_id:", newTeam.course_step_id);
+      console.log("selectedMembers.length:", selectedMembers.length);
+      console.log("newTeam.creator_role:", `"${newTeam.creator_role}"`);
 
-      if (!newTeam.name || !newTeam.course_step_id || validMembers.length === 0) {
-        setErrors(["チーム名、コース、メンバーは必須です"]);
+      const validationErrors: string[] = [];
+
+      // チーム名チェック
+      if (!newTeam.name.trim()) {
+        console.log("❌ チーム名が空です");
+        validationErrors.push("チーム名を入力してください。");
+      } else {
+        console.log("✅ チーム名OK:", `"${newTeam.name.trim()}"`);
+      }
+
+      // ステップチェック
+      if (newTeam.course_step_id === null) {
+        console.log("❌ ステップが選択されていません");
+        validationErrors.push("ステップを選択してください。");
+      } else {
+        console.log("✅ ステップOK:", newTeam.course_step_id);
+      }
+
+      // メンバーチェック
+      if (selectedMembers.length === 0) {
+        console.log("❌ メンバーが選択されていません");
+        validationErrors.push("メンバーを1人以上選択してください。");
+      } else {
+        console.log("✅ メンバーOK:", selectedMembers.length, "人");
+      }
+
+      // 作成者役割チェック
+      if (newTeam.creator_role === "unspecified") {
+        console.log("❌ 作成者の役割が選択されていません");
+        validationErrors.push("あなたの役割を選択してください。");
+      } else {
+        console.log("✅ 作成者役割OK:", `"${newTeam.creator_role}"`);
+      }
+
+      // 各メンバーの役割チェック
+      selectedMembers.forEach((member, index) => {
+        console.log(`Member ${index + 1} (${member.user_name}):`, {
+          role_in_team: member.role_in_team,
+          is_unspecified: member.role_in_team === "unspecified",
+          is_empty: !member.role_in_team,
+        });
+
+        if (!member.role_in_team || member.role_in_team === "unspecified") {
+          console.log(`❌ ${member.user_name} の役割が選択されていません`);
+          validationErrors.push(`${member.user_name} のチーム内での役割を選択してください。`);
+        } else {
+          console.log(`✅ ${member.user_name} の役割OK:`, `"${member.role_in_team}"`);
+        }
+      });
+
+      console.log("=== VALIDATION ERRORS ===");
+      console.log("validationErrors:", validationErrors);
+      console.log("validationErrors.length:", validationErrors.length);
+
+      if (validationErrors.length > 0) {
+        console.log("❌ バリデーションエラーあり、処理を停止");
+        setErrors(validationErrors);
         setIsLoading(false);
         return;
       }
 
-      const memberIds = validMembers.filter((member) => member && member.id).map((member) => member.id);
+      console.log("✅ バリデーション通過、チーム作成処理を開始");
+
+      console.log("=== TEAM CREATION DEBUG ===");
+      console.log("newTeam:", newTeam);
+      console.log("selectedMembers:", selectedMembers);
+
+      const memberDataToSend = selectedMembers.map((member) => ({
+        user_id: member.user_id,
+        role_in_team: member.role_in_team === "unspecified" ? null : member.role_in_team,
+      }));
+
+      const requestBody = {
+        course_step_id: newTeam.course_step_id as number,
+        name: newTeam.name.trim(),
+        project_name: newTeam.project_name?.trim() || null,
+        member_data: memberDataToSend,
+        creator_role: newTeam.creator_role === "unspecified" ? null : newTeam.creator_role,
+      };
+
+      console.log("📤 API REQUEST:");
+      console.log("URL: POST /api/teams");
+      console.log("Body:", JSON.stringify(requestBody, null, 2));
 
       const response = await fetch("/api/teams", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          course_step_id: newTeam.course_step_id,
-          name: newTeam.name,
-          project_name: newTeam.project_name || null,
-          member_ids: memberIds,
-          creator_role: newTeam.creator_role || null,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
+      console.log("📥 API RESPONSE:");
+      console.log("Status:", response.status, response.statusText);
+      console.log("Headers:", Object.fromEntries(response.headers.entries()));
+
       const data = await response.json();
+      console.log("Response Data:", JSON.stringify(data, null, 2));
+      console.log("Error Message:", data.error);
+      console.log("Error Details:", data.details);
 
       if (data.success) {
         setSuccessMessage("チームが正常に作成されました");
@@ -228,8 +348,8 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
         setNewTeam({
           name: "",
           project_name: "",
-          course_step_id: 0,
-          creator_role: "",
+          course_step_id: null,
+          creator_role: "unspecified",
         });
         setSelectedMembers([]);
         loadData();
@@ -244,15 +364,33 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
     }
   };
 
-  const handleSelectMember = (user: UserOption) => {
-    if (!user || !user.id) return;
+  const handleSelectMember = (userOption: UserOption) => {
+    if (!userOption || !userOption.id) return;
 
-    setSelectedMembers((prev) => {
-      const currentMembers = Array.isArray(prev) ? prev : [];
-      return [...currentMembers, user];
-    });
+    if (!selectedMembers.some((member) => member.user_id === userOption.id)) {
+      setSelectedMembers((prev) => {
+        const currentMembers = Array.isArray(prev) ? prev : [];
+        // ユーザーのプロフィール役割が有効な場合はそれを使用、そうでなければ "unspecified"
+        const validRoles = ["biz", "tech", "design"];
+        const initialRole = validRoles.includes(userOption.role || "") ? userOption.role : "unspecified";
+
+        return [
+          ...currentMembers,
+          {
+            user_id: userOption.id,
+            user_name: userOption.name,
+            user_email: userOption.email,
+            role_in_team: initialRole,
+          },
+        ];
+      });
+    }
     setIsUserDropdownOpen(false);
     setSearchQuery("");
+  };
+
+  const handleMemberRoleChange = (userId: number, role: string) => {
+    setSelectedMembers((prev) => prev.map((member) => (member.user_id === userId ? { ...member, role_in_team: role } : member)));
   };
 
   const handleRemoveMember = (userId: number) => {
@@ -260,7 +398,7 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
 
     setSelectedMembers((prev) => {
       const currentMembers = Array.isArray(prev) ? prev : [];
-      return currentMembers.filter((member) => member && member.id !== userId);
+      return currentMembers.filter((member) => member && member.user_id !== userId);
     });
   };
 
@@ -272,20 +410,33 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
     });
   };
 
+  // 表示用のgetRoleLabel関数（ログを削除）
   const getRoleLabel = (role: string | null) => {
-    if (!role) return null;
+    if (role === null || role === undefined || role === "" || role === "unspecified") {
+      return "未指定";
+    }
 
+    const normalized = String(role).trim().toLowerCase();
     const roleMap: Record<string, string> = {
-      tech_lead: "Tech Lead",
-      developer_main: "Developer",
-      biz_planning: "Biz/企画",
-      design_ux: "Design/UX",
-      pm_management: "PM",
-      support_member: "サポート",
-      no_preference: "未指定",
+      tech: "Tech",
+      biz: "Biz",
+      design: "Design",
+      "tech lead": "Tech",
+      developer: "Tech",
+      designer: "Design",
+      pm: "Biz",
+      テック: "Tech",
+      ビズ: "Biz",
+      デザイン: "Design",
+      エンジニア: "Tech",
+      プログラマー: "Tech",
+      ビジネス: "Biz",
+      プロジェクトマネージャー: "Biz",
+      "ui/ux": "Design",
+      デザイナー: "Design",
     };
 
-    return roleMap[role] || role;
+    return roleMap[normalized] || "未指定";
   };
 
   const teamsByStep = courseSteps
@@ -316,24 +467,30 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                 新しいチーム作成
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>新しいチーム作成</DialogTitle>
-                <DialogDescription>チームの詳細情報を入力し、メンバーを選択してください。</DialogDescription>
+                <DialogDescription>チームの詳細情報を入力し、メンバーと役割を設定してください。</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium text-[#343A40]">ステップ選択</label>
-                  <Select value={newTeam.course_step_id.toString()} onValueChange={(value) => setNewTeam({ ...newTeam, course_step_id: Number.parseInt(value) })}>
+                  <Select value={newTeam.course_step_id?.toString() || ""} onValueChange={(value) => setNewTeam({ ...newTeam, course_step_id: Number.parseInt(value) })}>
                     <SelectTrigger>
                       <SelectValue placeholder="ステップを選択" />
                     </SelectTrigger>
                     <SelectContent>
-                      {courseSteps.map((course) => (
-                        <SelectItem key={course.id} value={course.id.toString()}>
-                          {course.name}
+                      {courseSteps.length === 0 ? (
+                        <SelectItem value="" disabled>
+                          ステップが見つかりません
                         </SelectItem>
-                      ))}
+                      ) : (
+                        courseSteps.map((course) => (
+                          <SelectItem key={course.id} value={course.id.toString()}>
+                            {course.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -350,24 +507,60 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
 
                 <div>
                   <label className="text-sm font-medium text-[#343A40]">あなたの役割</label>
-                  <Input placeholder="例: Tech Lead, PM, Designer" value={newTeam.creator_role} onChange={(e) => setNewTeam({ ...newTeam, creator_role: e.target.value })} />
+                  <Select value={newTeam.creator_role} onValueChange={(value) => setNewTeam({ ...newTeam, creator_role: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="役割を選択" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {createTeamRoleOptions
+                        .filter((opt) => opt.value !== "unspecified")
+                        .map((role) => (
+                          <SelectItem key={role.value} value={role.value}>
+                            {role.label}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-[#343A40]">メンバー選択</label>
+                  <label className="text-sm font-medium text-[#343A40]">メンバー選択と役割設定</label>
 
-                  {/* 選択済みメンバー表示 */}
+                  {/* 選択済みメンバーと役割表示 */}
                   {Array.isArray(selectedMembers) && selectedMembers.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
+                    <div className="space-y-3 mb-4 p-4 bg-gray-50 rounded-lg">
+                      <h4 className="text-sm font-medium">選択済みメンバー ({selectedMembers.length}人)</h4>
                       {selectedMembers
-                        .filter((member) => member && member.id)
+                        .filter((member) => member && member.user_id)
                         .map((member) => (
-                          <Badge key={member.id} variant="secondary" className="flex items-center gap-1 pl-2">
-                            {member.name || "Unknown"}
-                            <button onClick={() => handleRemoveMember(member.id)} className="ml-1 rounded-full hover:bg-gray-200 p-0.5">
-                              <X className="h-3 w-3" />
-                            </button>
-                          </Badge>
+                          <div key={member.user_id} className="flex items-center justify-between p-3 bg-white rounded-lg border">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gradient-to-br from-[#5D70F7] to-[#38C9B9] rounded-full flex items-center justify-center">
+                                <User className="w-4 h-4 text-white" />
+                              </div>
+                              <div>
+                                <div className="font-medium text-[#343A40]">{member.user_name}</div>
+                                <div className="text-xs text-[#6C757D]">{member.user_email}</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Select value={member.role_in_team || "unspecified"} onValueChange={(value) => handleMemberRoleChange(member.user_id, value)}>
+                                <SelectTrigger className="w-32">
+                                  <SelectValue placeholder="役割選択" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {createTeamRoleOptions.map((role) => (
+                                    <SelectItem key={role.value} value={role.value}>
+                                      {role.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button variant="outline" size="sm" onClick={() => handleRemoveMember(member.user_id)} className="px-2 py-1 h-8">
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
                         ))}
                     </div>
                   )}
@@ -445,7 +638,7 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                   <SelectValue placeholder="ステップを選択" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">すべて表示</SelectItem> {/* ★ ここを追加しました */}
+                  <SelectItem value="all">すべて表示</SelectItem>
                   {courseSteps.map((course) => (
                     <SelectItem key={course.id} value={course.id.toString()}>
                       {course.name}
@@ -506,11 +699,9 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            {member.role_in_team && (
-                              <Badge variant="outline" className="text-xs">
-                                {getRoleLabel(member.role_in_team)}
-                              </Badge>
-                            )}
+                            <Badge variant="outline" className="text-xs">
+                              {getRoleLabel(member.role_in_team)}
+                            </Badge>
                           </div>
                         </div>
                       ))}
@@ -536,64 +727,56 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                     <Badge className="mr-2 bg-[#5D70F7] text-white">{step.name}</Badge>
                   </h2>
 
-                  {teams.length === 0 ? (
-                    <Card className="border border-gray-200 shadow-sm p-6 text-center">
-                      <p className="text-[#6C757D]">このステップのチームはありません</p>
-                    </Card>
-                  ) : (
-                    <div className="space-y-4">
-                      {teams.map((team) => (
-                        <Card key={team.id} className="border border-gray-200 shadow-sm">
-                          <CardHeader>
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <CardTitle className="flex items-center gap-2 text-[#343A40]">
-                                  <Users className="w-5 h-5 text-[#5D70F7]" />
-                                  {team.name}
-                                </CardTitle>
-                                <div className="flex items-center gap-4 mt-2">
-                                  {team.project_name && <Badge className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20 text-xs">{team.project_name}</Badge>}
-                                  <div className="flex items-center gap-1 text-xs text-[#6C757D]">
-                                    <Calendar className="w-3 h-3" />
-                                    {formatDate(team.created_at)}
-                                  </div>
+                  <div className="space-y-4">
+                    {teams.map((team) => (
+                      <Card key={team.id} className="border border-gray-200 shadow-sm">
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <CardTitle className="flex items-center gap-2 text-[#343A40]">
+                                <Users className="w-5 h-5 text-[#5D70F7]" />
+                                {team.name}
+                              </CardTitle>
+                              <div className="flex items-center gap-4 mt-2">
+                                {team.project_name && <Badge className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20 text-xs">{team.project_name}</Badge>}
+                                <div className="flex items-center gap-1 text-xs text-[#6C757D]">
+                                  <Calendar className="w-3 h-3" />
+                                  {formatDate(team.created_at)}
                                 </div>
                               </div>
-                              <Button variant="outline" size="sm" onClick={() => deleteTeam(team.id, team.name)} disabled={isLoading} className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300">
-                                <Trash2 className="w-4 h-4 mr-1" />
-                                削除
-                              </Button>
                             </div>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-3">
-                              <h3 className="text-sm font-medium text-[#343A40]">メンバー ({team.members.length}人)</h3>
-                              {team.members.map((member) => (
-                                <div key={member.user_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-gradient-to-br from-[#5D70F7] to-[#38C9B9] rounded-full flex items-center justify-center">
-                                      <User className="w-4 h-4 text-white" />
-                                    </div>
-                                    <div>
-                                      <div className="font-medium text-[#343A40]">{member.user_name}</div>
-                                      <div className="text-sm text-[#6C757D]">{member.user_email}</div>
-                                    </div>
+                            <Button variant="outline" size="sm" onClick={() => deleteTeam(team.id, team.name)} disabled={isLoading} className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300">
+                              <Trash2 className="w-4 h-4 mr-1" />
+                              削除
+                            </Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            <h3 className="text-sm font-medium text-[#343A40]">メンバー ({team.members.length}人)</h3>
+                            {team.members.map((member) => (
+                              <div key={member.user_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-gradient-to-br from-[#5D70F7] to-[#38C9B9] rounded-full flex items-center justify-center">
+                                    <User className="w-4 h-4 text-white" />
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    {member.role_in_team && (
-                                      <Badge variant="outline" className="text-xs">
-                                        {getRoleLabel(member.role_in_team)}
-                                      </Badge>
-                                    )}
+                                  <div>
+                                    <div className="font-medium text-[#343A40]">{member.user_name}</div>
+                                    <div className="text-sm text-[#6C757D]">{member.user_email}</div>
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-xs">
+                                    {getRoleLabel(member.role_in_team)}
+                                  </Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
               ))
             )}

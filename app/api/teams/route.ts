@@ -1,10 +1,10 @@
-import { type NextRequest, NextResponse } from "next/server";
-// tsconfig.json の設定でエイリアスが使えるため、短いエイリアスパスを使用
-import prisma from "@/lib/prisma"; // @/lib/prisma は student-matching-app/lib/prisma を指す
+// app/api/teams/route.ts
 
-// チーム関連の型定義
-// Prismaが生成する型を使うため、これらのインターフェースは厳密には不要ですが、
-// コードの可読性や既存の型定義との整合性のため残しておいても問題ありません。
+import { type NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library"; // Prismaのエラー型をインポート
+
+// チーム関連の型定義（Prismaで自動生成される型があるため、これらはコードの理解を助ける目的）
 interface Team {
   id: number;
   course_step_id: number;
@@ -33,15 +33,15 @@ interface TeamWithMembers extends Team {
   course_step_name: string;
 }
 
+interface MemberData {
+  user_id: number;
+  role_in_team: string | null;
+}
+
 // ログインユーザーIDを取得するヘルパー関数
 async function getCurrentUserId(request: NextRequest): Promise<number | null> {
   try {
-    // TODO: 実際の認証システムからログインユーザーIDを取得
-    // 現在は/api/auth/meを呼び出してユーザー情報を取得する想定
-
-    // セッションまたはJWTトークンからユーザーIDを取得する処理をここに実装
-    // 例: request.headers.get('authorization') などからトークンを取得
-
+    // TODO: 実際の認証システムからログインユーザーIDを取得する処理をここに実装
     // 暫定的に固定値を返すが、実際の認証システムに合わせて修正が必要
     return 1; // 現在ログインしているユーザーID（田中太郎）
   } catch (error) {
@@ -54,7 +54,10 @@ async function getCurrentUserId(request: NextRequest): Promise<number | null> {
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
-    const { course_step_id, name, project_name, member_ids, creator_role } = data;
+    const { course_step_id, name, project_name, member_data, creator_role } = data;
+
+    console.log("=== API: チーム作成リクエスト受信 ===");
+    console.log("Received data:", JSON.stringify(data, null, 2));
 
     // 作成者のユーザーIDを取得
     const creatorUserId = await getCurrentUserId(request);
@@ -68,13 +71,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log("Creator user ID:", creatorUserId);
+
     // バリデーション
-    if (!course_step_id || !name || !Array.isArray(member_ids) || member_ids.length === 0) {
-      return NextResponse.json({ success: false, error: "必須項目が不足しています" }, { status: 400 });
+    if (!course_step_id || !name || !Array.isArray(member_data) || member_data.length === 0) {
+      console.log("❌ 基本項目のバリデーションエラー");
+      return NextResponse.json(
+        {
+          success: false,
+          error: "必須項目が不足しています。チーム名、ステップ、メンバーは必須です。",
+        },
+        { status: 400 }
+      );
     }
 
-    // 作成者を含む全メンバーのリストを作成
-    const allMemberIds = [...new Set([creatorUserId, ...member_ids])]; // 重複を排除
+    if (typeof creator_role !== "string" || creator_role.trim() === "") {
+      console.log("❌ 作成者役割のバリデーションエラー");
+      return NextResponse.json(
+        {
+          success: false,
+          error: "あなたの役割を選択してください。",
+        },
+        { status: 400 }
+      );
+    }
+
+    // member_dataの形式チェック
+    const isValidMemberData = member_data.every((member: any) => typeof member.user_id === "number" && (typeof member.role_in_team === "string" || member.role_in_team === null));
+
+    if (!isValidMemberData) {
+      console.log("❌ メンバーデータの形式エラー");
+      return NextResponse.json(
+        {
+          success: false,
+          error: "メンバーデータの形式が正しくありません。",
+        },
+        { status: 400 }
+      );
+    }
+
+    // メンバーのユーザーIDを抽出
+    const memberUserIds = member_data.map((member: MemberData) => member.user_id);
+    const allMemberIds = [...new Set([creatorUserId, ...memberUserIds])]; // 重複除去
+
+    console.log("Member user IDs:", memberUserIds);
+    console.log("All member IDs (including creator):", allMemberIds);
 
     // course_stepの存在確認
     const courseStep = await prisma.course_steps.findUnique({
@@ -97,50 +138,71 @@ export async function POST(request: NextRequest) {
     });
 
     if (users.length !== allMemberIds.length) {
+      const foundUserIds = new Set(users.map((u) => u.id));
+      const invalidUserIds = allMemberIds.filter((id) => !foundUserIds.has(id));
       return NextResponse.json(
         {
           success: false,
-          error: "存在しないユーザーIDが含まれています",
+          error: `存在しないユーザーIDが含まれています: ${invalidUserIds.join(", ")}`,
         },
         { status: 400 }
       );
     }
 
+    console.log("✅ バリデーション通過、チーム作成開始");
+
     const newTeam = await prisma.$transaction(async (tx) => {
+      // チーム作成
       const team = await tx.teams.create({
         data: {
           course_step_id,
           name: name.trim(),
           project_name: project_name?.trim() || null,
-          // created_at, updated_at は Prisma の @default(now()) と @updatedAt で自動設定される
         },
       });
 
-      // 修正1: joined_atとleft_atを明示的に設定
-      // 作成者を含む全メンバーのメンバーシップを作成
-      const membershipData = allMemberIds.map((userId: number) => ({
-        team_id: team.id,
-        user_id: userId,
-        // 作成者にはcreator_roleを設定、その他のメンバーは元の指定に従う
-        role_in_team: userId === creatorUserId && creator_role ? creator_role : userId === member_ids[0] && creator_role ? creator_role : null,
-        joined_at: new Date(), // 明示的に現在日時を設定
-        left_at: null, // 明示的にnullを設定（まだ離脱していない）
-      }));
+      console.log("チーム作成完了:", team.id);
 
+      // メンバーシップデータを準備
+      const membershipData = [
+        // 作成者のメンバーシップ
+        {
+          team_id: team.id,
+          user_id: creatorUserId,
+          role_in_team: creator_role.trim(),
+          joined_at: new Date(),
+          left_at: null,
+        },
+        // その他のメンバーのメンバーシップ（作成者が重複しないようフィルタリング）
+        ...member_data
+          .filter((member: MemberData) => member.user_id !== creatorUserId)
+          .map((member: MemberData) => ({
+            team_id: team.id,
+            user_id: member.user_id,
+            role_in_team: member.role_in_team,
+            joined_at: new Date(),
+            left_at: null,
+          })),
+      ];
+
+      console.log("メンバーシップデータ:", membershipData);
+
+      // メンバーシップを一括作成
       await tx.team_memberships.createMany({
         data: membershipData,
       });
 
+      console.log("メンバーシップ作成完了");
+
       return team;
     });
 
-    console.log("チーム作成:", {
+    console.log("チーム作成成功:", {
       team_id: newTeam.id,
       course_step_id,
       name,
       project_name,
       creator_user_id: creatorUserId,
-      original_member_ids: member_ids,
       all_member_ids: allMemberIds,
       creator_role,
     });
@@ -151,8 +213,45 @@ export async function POST(request: NextRequest) {
       message: "チームが正常に作成されました",
     });
   } catch (error) {
-    console.error("チーム作成エラー:", error); // エラーを詳細にログ出力
-    return NextResponse.json({ success: false, error: "サーバーエラーが発生しました" }, { status: 500 });
+    console.error("❌ チーム作成エラー:", error);
+
+    if (error instanceof PrismaClientKnownRequestError) {
+      console.error("チーム作成Prismaエラー (P" + error.code + "):", error.message, "メタデータ:", error.meta);
+      // P2002 はユニーク制約違反
+      if (error.code === "P2002") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `データベースエラー: この${(error.meta?.target as string[])?.join(", ") || "項目"}は既に存在します。`,
+          },
+          { status: 409 }
+        ); // Conflict
+      }
+      return NextResponse.json(
+        {
+          success: false,
+          error: `データベースエラー: ${error.message}`,
+        },
+        { status: 500 }
+      );
+    } else if (error instanceof Error) {
+      console.error("チーム作成一般エラー:", error.message, error.stack);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `サーバーエラーが発生しました: ${error.message}`,
+        },
+        { status: 500 }
+      );
+    }
+    console.error("チーム作成不明なエラー:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: "サーバーエラーが発生しました",
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -249,6 +348,9 @@ export async function DELETE(request: NextRequest) {
     });
   } catch (error) {
     console.error("チーム削除エラー:", error);
+    if (error instanceof Error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
     return NextResponse.json({ success: false, error: "サーバーエラーが発生しました" }, { status: 500 });
   }
 }
@@ -267,7 +369,6 @@ export async function GET(request: NextRequest) {
       let userId: number;
 
       if (userIdParam === "current") {
-        // 修正2: ログインユーザーIDを動的に取得
         const currentUserId = await getCurrentUserId(request);
         if (!currentUserId) {
           return NextResponse.json(
@@ -377,6 +478,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("チーム取得エラー:", error);
+    if (error instanceof Error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
     return NextResponse.json({ success: false, error: "サーバーエラーが発生しました" }, { status: 500 });
   }
 }
