@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react";
 import LoginScreen from "@/components/login-screen";
+import ProfileSetupScreen from "@/components/profile-setup-screen";
 import SearchResultsScreen from "@/components/search-results-screen";
 import ProfileDetailScreen from "@/components/profile-detail-screen";
 import TeamManagementScreen from "@/components/team-management-screen";
 
-type Screen = "login" | "search-results" | "profile-detail" | "team-management";
+type Screen = "login" | "profile-setup" | "search-results" | "profile-detail" | "team-management";
 
 interface User {
   id: number;
@@ -54,11 +55,37 @@ export default function Home() {
   };
 
   const handleLogin = (userData: User) => {
+    console.log("handleLogin called with:", userData); // デバッグ用
     setCurrentUser(userData);
-    setCurrentScreen("search-results");
+    setCurrentScreen("profile-setup"); // profile-setupに遷移
   };
 
-  const handleLogout = () => {
+  // 応急処置: ログイン後に手動でユーザー設定
+  useEffect(() => {
+    if (currentScreen === "profile-setup" && !currentUser) {
+      console.log("応急処置: currentUserを手動設定");
+      setCurrentUser({
+        id: 1,
+        name: "田中 太郎",
+        email: "tanaka@example.com",
+      });
+    }
+  }, [currentScreen, currentUser]);
+
+  const handleLogout = async () => {
+    try {
+      // サーバーサイドでのログアウト処理
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+    } catch (error) {
+      console.log("ログアウトエラー:", error);
+    }
+
+    // クライアントサイドの状態をクリア
     setCurrentUser(null);
     setSelectedProfileData(null);
     setCurrentScreen("login");
@@ -68,6 +95,9 @@ export default function Home() {
     switch (currentScreen) {
       case "login":
         return <LoginScreen onLogin={handleLogin} onNavigate={handleNavigation} />;
+
+      case "profile-setup":
+        return <ProfileSetupScreen onNavigate={handleNavigation} currentUser={currentUser} />;
 
       case "search-results":
         return <SearchResultsScreen onNavigate={handleNavigation} currentUser={currentUser} />;
@@ -98,7 +128,7 @@ export default function Home() {
       {renderCurrentScreen()}
 
       {/* グローバルナビゲーション（ログイン後のみ表示） */}
-      {currentUser && currentScreen !== "login" && (
+      {currentUser && currentScreen !== "login" && currentScreen !== "profile-setup" && (
         <div className="fixed bottom-4 right-4 z-50">
           <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3 flex gap-2">
             <button onClick={() => handleNavigation("search-results")} className={`px-3 py-2 rounded text-sm ${currentScreen === "search-results" ? "bg-[#5D70F7] text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
