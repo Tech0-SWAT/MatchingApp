@@ -546,11 +546,6 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
               <div key={step.id}>
                 <h2 className="text-xl font-semibold text-[#343A40] mb-4 flex items-center">
                   <Badge className="mr-2 bg-[#5D70F7] text-white">{step.name}</Badge>
-                  {step.start_date && step.end_date && (
-                    <span className="text-sm font-normal text-[#6C757D]">
-                      {formatDate(step.start_date)} 〜 {formatDate(step.end_date)}
-                    </span>
-                  )}
                 </h2>
 
                 {teams.length === 0 ? (
