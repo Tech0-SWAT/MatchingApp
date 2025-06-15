@@ -60,12 +60,19 @@ export async function POST(req: NextRequest) {
 
     // 候補ユーザーの絞り込み
     console.log("Fetching candidateUsers, excluding userId:", userId);
+    // 先に絞り込み条件に合致するユーザーのみ取得し、その後embedding計算を行う
     const candidateUsers = await prisma.users.findMany({
       where: {
         id: { not: userId },
-        user_profiles: desiredRole
-          ? { desired_role_in_team: desiredRole }
-          : undefined,
+        ...(desiredRole
+          ? {
+              user_profiles: {
+                is: {
+                  desired_role_in_team: desiredRole,
+                },
+              },
+            }
+          : {}),
       },
       include: {
         user_profiles: true,
@@ -109,6 +116,12 @@ export async function POST(req: NextRequest) {
         const vec = embRes.data[0].embedding;
         const score = cosineSimilarity(sourceVec, vec);
         console.log(`Computed similarity score for user ${user.id}:`, score);
+
+        // スコアが閾値未満ならスキップ（例: 0.5未満はマッチしないとみなす）
+        if (score < 0.5) {
+          console.log(`Skipping user ${user.id} due to low score: ${score}`);
+          continue;
+        }
 
         // match_results テーブルに upsert
         console.log("Upserting match_results for user pair:", userId, user.id);
