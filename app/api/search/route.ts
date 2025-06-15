@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     const sanitizedCriteria = {
       keyword: searchCriteria.keyword?.trim().replace(/<[^>]*>/g, "") || "",
-      desired_role_in_team: searchCriteria.desired_role_in_team || "",
+      desired_role_in_team: searchCriteria.desired_role_in_team && searchCriteria.desired_role_in_team !== "" ? searchCriteria.desired_role_in_team : undefined,
       personality_type: searchCriteria.personality_type?.trim().replace(/<[^>]*>/g, "") || "",
       timeslot_ids: Array.isArray(searchCriteria.timeslot_ids) ? searchCriteria.timeslot_ids : [],
       idea_status: searchCriteria.idea_status || "",
@@ -54,10 +54,15 @@ export async function POST(request: NextRequest) {
     let total: number = 0;
 
     // ★ 修正: fetchMatchesOnly が true の場合、match_results からデータを取得する
-    if (sanitizedCriteria.fetchMatchesOnly && sanitizedCriteria.currentUserId) {
+      if (sanitizedCriteria.fetchMatchesOnly && sanitizedCriteria.currentUserId) {
       const matchedResults = await prisma.match_results.findMany({
         where: {
           user_id: sanitizedCriteria.currentUserId,
+          matched_user: sanitizedCriteria.desired_role_in_team && sanitizedCriteria.desired_role_in_team !== "" ? {
+            user_profiles: {
+              desired_role_in_team: sanitizedCriteria.desired_role_in_team
+            }
+          } : undefined
         },
         include: {
           matched_user: {
@@ -113,8 +118,8 @@ export async function POST(request: NextRequest) {
           { user_team_priorities: { some: { team_priority: { name: { contains: sanitizedCriteria.keyword, mode: "insensitive" } } } } },
         ];
       }
-      if (sanitizedCriteria.desired_role_in_team) {
-        whereClause.user_profiles = { ...whereClause.user_profiles, desired_role_in_team: sanitizedCriteria.desired_role_in_team };
+      if (sanitizedCriteria.desired_role_in_team && sanitizedCriteria.desired_role_in_team !== "") {
+        whereClause.user_profiles = { ...whereClause.user_profiles, desired_role_in_team: { contains: sanitizedCriteria.desired_role_in_team, mode: "insensitive" } };
       }
       if (sanitizedCriteria.personality_type) {
         whereClause.user_profiles = { ...whereClause.user_profiles, personality_type: { contains: sanitizedCriteria.personality_type, mode: "insensitive" } };
@@ -158,9 +163,9 @@ export async function POST(request: NextRequest) {
               self_introduction_comment: user.user_profiles.self_introduction_comment,
             }
           : { personality_type: null, idea_status: null, desired_role_in_team: null, self_introduction_comment: null },
-        product_genres: user.user_product_genres.map((upg) => ({ id: upg.product_genre.id, name: upg.product_genre.name })),
-        timeslots: user.user_availabilities.map((ua) => ({ id: ua.timeslot.id, description: ua.timeslot.description, day_type: ua.timeslot.day_type })),
-        team_priorities: user.user_team_priorities.map((utp) => ({ id: utp.team_priority.id, name: utp.team_priority.name })),
+        product_genres: user.user_product_genres.map((upg: { product_genre: { id: number; name: string } }) => ({ id: upg.product_genre.id, name: upg.product_genre.name })),
+        timeslots: user.user_availabilities.map((ua: { timeslot: { id: number; description: string; day_type: string } }) => ({ id: ua.timeslot.id, description: ua.timeslot.description, day_type: ua.timeslot.day_type })),
+        team_priorities: user.user_team_priorities.map((utp: { team_priority: { id: number; name: string } }) => ({ id: utp.team_priority.id, name: utp.team_priority.name })),
         match_keywords: [],
       }));
     }

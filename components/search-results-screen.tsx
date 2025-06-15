@@ -85,7 +85,49 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
     ...initialCurrentUser, // 他のプロパティも保持
   };
 
-  console.log("CurrentUser in SearchResultsScreen:", currentUser);
+  const fetchAndDisplayMatchResults = async (fetchMatchesOnly = false, desiredRole: string | null = null) => {
+    setIsLoading(true);
+    setErrors([]);
+    try {
+      if (!currentUser || !currentUser.id) {
+        setErrors(["マッチング結果を表示するにはログインユーザーが必要です。"]);
+        setIsLoading(false);
+        return;
+      }
+
+      const body: any = {
+        fetchMatchesOnly: fetchMatchesOnly,
+        currentUserId: currentUser.id,
+      };
+      if (desiredRole) {
+        body.desired_role_in_team = desiredRole;
+      }
+
+      const response = await fetch("/api/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setFilteredStudents(Array.isArray(data.results) ? data.results : []);
+        setShowResults(true);
+      } else {
+        setErrors(data.errors || [data.error || "マッチング結果の取得に失敗しました"]);
+        setFilteredStudents([]);
+      }
+    } catch (error) {
+      console.error("マッチング結果取得エラー:", error);
+      setErrors(["ネットワークエラーが発生しました。再度お試しください。"]);
+      setFilteredStudents([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleStartMatching = async () => {
     setIsLoading(true);
@@ -118,7 +160,7 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
 
       if (data.success) {
         setMatchingStatusMessage("✅ マッチング計算が終了しました！結果を表示します。");
-        await fetchAndDisplayMatchResults();
+        await fetchAndDisplayMatchResults(true, roleType);
         setShowMatchingResults(true);
       } else {
         setErrors([data.error || "マッチング計算に失敗しました。"]);
@@ -128,45 +170,6 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
       console.error("マッチング計算エラー:", error);
       setErrors(["ネットワークエラーが発生しました。再度お試しください。"]);
       setMatchingStatusMessage(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchAndDisplayMatchResults = async () => {
-    setIsLoading(true);
-    setErrors([]);
-    try {
-      if (!currentUser || !currentUser.id) {
-        setErrors(["マッチング結果を表示するにはログインユーザーが必要です。"]);
-        setIsLoading(false);
-        return;
-      }
-
-      const response = await fetch("/api/search", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fetchMatchesOnly: true,
-          currentUserId: currentUser.id,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setFilteredStudents(Array.isArray(data.results) ? data.results : []);
-        setShowResults(true);
-      } else {
-        setErrors(data.errors || [data.error || "マッチング結果の取得に失敗しました"]);
-        setFilteredStudents([]);
-      }
-    } catch (error) {
-      console.error("マッチング結果取得エラー:", error);
-      setErrors(["ネットワークエラーが発生しました。再度お試しください。"]);
-      setFilteredStudents([]);
     } finally {
       setIsLoading(false);
     }
@@ -186,29 +189,13 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
     return idea ? idea.label : status;
   };
 
-  // Fixed function to handle both string arrays and object arrays
-  const getGenreLabels = (genres: any[]) => {
+  // 競合解決: fix/search-results-enhancement-from-matching2 の内容を採用
+  const getGenreLabels = (genres: string[]) => {
+    // string[] のみを想定
     if (!Array.isArray(genres)) return [];
     return genres.map((genre) => {
-      // Handle object with id/name properties
-      if (typeof genre === "object" && genre !== null) {
-        if (genre.name) return genre.name;
-        if (genre.label) return genre.label;
-        // If it has a value property, try to find the label from productGenres
-        if (genre.value) {
-          const found = productGenres.find((g) => g.value === genre.value);
-          return found ? found.label : genre.value;
-        }
-        // If it has an id, try to find by id (if productGenres had ids)
-        return genre.id || String(genre);
-      }
-      // Handle string values
-      if (typeof genre === "string") {
-        const found = productGenres.find((g) => g.value === genre);
-        return found ? found.label : genre;
-      }
-      // Fallback
-      return String(genre);
+      const found = productGenres.find((g) => g.value === genre);
+      return found ? found.label : genre;
     });
   };
 
@@ -303,7 +290,7 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
               </Card>
             ) : (
               <div className="space-y-4">
-                {filteredStudents.map((student, index) => (
+                {filteredStudents.map((student: any, index: number) => (
                   <Card key={student?.id || index} className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer w-full" onClick={() => handleStudentClick(student)}>
                     <CardContent className="p-6">
                       <div className="flex-1">
@@ -357,11 +344,16 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
                               <div className="flex flex-wrap gap-1">
                                 {student?.profile?.idea_status && <Badge className="bg-[#FFD700]/10 text-[#B8860B] border-[#FFD700]/20">{getIdeaStatusLabel(student.profile.idea_status)}</Badge>}
                                 {Array.isArray(student?.product_genres) &&
-                                  getGenreLabels(student.product_genres.slice(0, 2)).map((genre, genreIndex) => (
-                                    <Badge key={genreIndex} className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20">
-                                      {genre}
-                                    </Badge>
-                                  ))}
+                                  // getGenreLabels が string[] を返すことを想定しているため、
+                                  // student.product_genres が { id: number; name: string; } の配列の場合でも
+                                  // .name を取得して string[] に変換してから渡す必要があります。
+                                  getGenreLabels(student.product_genres.map((g: any) => g.name || g.value || String(g)))
+                                    .slice(0, 2)
+                                    .map((genre, genreIndex) => (
+                                      <Badge key={genreIndex} className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20">
+                                        {genre}
+                                      </Badge>
+                                    ))}
                                 {Array.isArray(student?.product_genres) && student.product_genres.length > 2 && <Badge className="bg-gray-100 text-gray-600">+{student.product_genres.length - 2}</Badge>}
                               </div>
                             </div>
