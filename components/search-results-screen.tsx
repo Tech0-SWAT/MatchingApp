@@ -16,9 +16,9 @@ interface SearchResultsScreenProps {
 
 const roleTypes = [
   { value: "", label: "こだわらない" },
-  { value: "tech", label: "Tech (技術・開発)" },
-  { value: "biz", label: "Biz (ビジネス・企画)" },
-  { value: "design", label: "Design (デザイン・UX)" },
+  { value: "biz", label: "Biz" },
+  { value: "tech", label: "Tech" },
+  { value: "design", label: "Design" },
 ];
 
 const weekdayTimesOptions = [
@@ -186,21 +186,29 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
     return idea ? idea.label : status;
   };
 
-  // 🔧 修正済み: オブジェクト配列と文字列配列の両方に対応
+  // Fixed function to handle both string arrays and object arrays
   const getGenreLabels = (genres: any[]) => {
     if (!Array.isArray(genres)) return [];
     return genres.map((genre) => {
-      // genreがオブジェクトの場合とstring の場合に対応
+      // Handle object with id/name properties
       if (typeof genre === "object" && genre !== null) {
-        // オブジェクトの場合、value プロパティまたは name プロパティを使用
-        const genreValue = genre.value || genre.name || genre.id;
-        const found = productGenres.find((g) => g.value === genreValue);
-        return found ? found.label : String(genreValue);
-      } else {
-        // 文字列の場合
-        const found = productGenres.find((g) => g.value === genre);
-        return found ? found.label : String(genre);
+        if (genre.name) return genre.name;
+        if (genre.label) return genre.label;
+        // If it has a value property, try to find the label from productGenres
+        if (genre.value) {
+          const found = productGenres.find((g) => g.value === genre.value);
+          return found ? found.label : genre.value;
+        }
+        // If it has an id, try to find by id (if productGenres had ids)
+        return genre.id || String(genre);
       }
+      // Handle string values
+      if (typeof genre === "string") {
+        const found = productGenres.find((g) => g.value === genre);
+        return found ? found.label : genre;
+      }
+      // Fallback
+      return String(genre);
     });
   };
 
@@ -212,10 +220,16 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
             <h1 className="text-2xl font-semibold text-[#343A40] mb-2">仲間を探す (Tech0内)</h1>
             <p className="text-[#6C757D]">詳細な条件を設定して、最適な仲間を見つけましょう</p>
           </div>
-          <Button onClick={() => onNavigate("team-management")} variant="outline" className="border-2 border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50] hover:text-white">
-            <Users className="w-4 h-4 mr-2" />
-            チーム管理
-          </Button>
+          <div className="flex gap-3">
+            <Button onClick={() => onNavigate("profile-setup")} variant="outline" className="border-2 border-[#5D70F7] text-[#5D70F7] hover:bg-[#5D70F7] hover:text-white">
+              <User className="w-4 h-4 mr-2" />
+              プロフィール設定
+            </Button>
+            <Button onClick={() => onNavigate("team-management")} variant="outline" className="border-2 border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50] hover:text-white">
+              <Users className="w-4 h-4 mr-2" />
+              チーム管理
+            </Button>
+          </div>
         </div>
 
         {/* エラーメッセージ */}
@@ -345,7 +359,7 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
                                 {Array.isArray(student?.product_genres) &&
                                   getGenreLabels(student.product_genres.slice(0, 2)).map((genre, genreIndex) => (
                                     <Badge key={genreIndex} className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20">
-                                      {String(genre)}
+                                      {genre}
                                     </Badge>
                                   ))}
                                 {Array.isArray(student?.product_genres) && student.product_genres.length > 2 && <Badge className="bg-gray-100 text-gray-600">+{student.product_genres.length - 2}</Badge>}
