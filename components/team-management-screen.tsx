@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Users, Plus, Calendar, User, ArrowLeft, CheckCircle, AlertCircle, X, ChevronsUpDown } from "lucide-react";
+import { Users, Plus, Calendar, User, ArrowLeft, CheckCircle, AlertCircle, X, ChevronsUpDown, Trash2 } from "lucide-react";
 
 interface TeamManagementScreenProps {
   onNavigate: (screen: string) => void;
@@ -169,6 +169,41 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
       console.error("データ読み込みエラー:", error);
       setCourseSteps([]); // ネットワークエラーなどの場合は空にする
       setTeams([]); // ネットワークエラーなどの場合は空にする
+    }
+  };
+
+  // ★ チーム削除関数を追加
+  const deleteTeam = async (teamId: number, teamName: string) => {
+    // 確認ダイアログ
+    if (!confirm(`「${teamName}」を削除しますか？\n\nこの操作は取り消せません。`)) {
+      return;
+    }
+
+    setIsLoading(true);
+    setErrors([]);
+    setSuccessMessage("");
+
+    try {
+      const response = await fetch(`/api/teams?teamId=${teamId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log("チーム削除成功");
+        setSuccessMessage(`「${teamName}」が削除されました`);
+        // チーム一覧を再取得
+        await loadData();
+      } else {
+        console.error("削除エラー:", data.error);
+        setErrors([`削除に失敗しました: ${data.error}`]);
+      }
+    } catch (error) {
+      console.error("削除リクエストエラー:", error);
+      setErrors(["削除中にエラーが発生しました"]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -468,6 +503,11 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                           </div>
                         </div>
                       </div>
+                      {/* ★ 削除ボタンを追加 */}
+                      <Button variant="outline" size="sm" onClick={() => deleteTeam(team.id, team.name)} disabled={isLoading} className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300">
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        削除
+                      </Button>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -536,6 +576,11 @@ export default function TeamManagementScreen({ onNavigate }: TeamManagementScree
                                 </div>
                               </div>
                             </div>
+                            {/* ★ 削除ボタンを追加 */}
+                            <Button variant="outline" size="sm" onClick={() => deleteTeam(team.id, team.name)} disabled={isLoading} className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300">
+                              <Trash2 className="w-4 h-4 mr-1" />
+                              削除
+                            </Button>
                           </div>
                         </CardHeader>
                         <CardContent>
