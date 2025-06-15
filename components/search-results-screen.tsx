@@ -1,3 +1,5 @@
+// components/search-results-screen.tsx
+
 "use client";
 
 import { useState } from "react";
@@ -189,13 +191,24 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
     return idea ? idea.label : status;
   };
 
-  // 競合解決: fix/search-results-enhancement-from-matching2 の内容を採用
-  const getGenreLabels = (genres: string[]) => {
-    // string[] のみを想定
+  // 競合解決済み: getGenreLabels 関数
+  // APIから { id: number; name: string; }[] または string[] の形式が来る可能性を考慮し、
+  // UIの productGenres のラベルにマッピングする
+  const getGenreLabels = (genres: Array<{ id: number; name: string } | string>) => {
     if (!Array.isArray(genres)) return [];
     return genres.map((genre) => {
-      const found = productGenres.find((g) => g.value === genre);
-      return found ? found.label : genre;
+      // APIから返るオブジェクト形式の場合 (例: { id: 1, name: "業務効率化・SaaS" })
+      if (typeof genre === "object" && genre !== null && "name" in genre) {
+        const found = productGenres.find((g) => g.label === genre.name); // labelとnameで一致を試みる
+        return found ? found.label : genre.name;
+      }
+      // 文字列形式の場合 (例: "saas")
+      if (typeof genre === "string") {
+        const found = productGenres.find((g) => g.value === genre);
+        return found ? found.label : genre;
+      }
+      // その他 (予期せぬ形式の場合)
+      return String(genre);
     });
   };
 
@@ -347,7 +360,7 @@ export default function SearchResultsScreen({ onNavigate, currentUser: initialCu
                                   // getGenreLabels が string[] を返すことを想定しているため、
                                   // student.product_genres が { id: number; name: string; } の配列の場合でも
                                   // .name を取得して string[] に変換してから渡す必要があります。
-                                  getGenreLabels(student.product_genres.map((g: any) => g.name || g.value || String(g)))
+                                  getGenreLabels(student.product_genres.map((g: any) => g.name || g.value || String(g))) // ここで string[] に変換
                                     .slice(0, 2)
                                     .map((genre, genreIndex) => (
                                       <Badge key={genreIndex} className="bg-[#4CAF50]/10 text-[#2E7D32] border-[#4CAF50]/20">

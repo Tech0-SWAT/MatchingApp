@@ -1,3 +1,5 @@
+// components/profile-setup-screen.tsx
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -52,20 +54,31 @@ export default function ProfileSetupScreen({ onNavigate }: ProfileSetupScreenPro
         }
 
         // プロフィール取得（編集時）
-        const profileResponse = await fetch("/api/profile?userId=current");
+        // TODO: 実際のログインユーザーIDを使用する
+        const profileResponse = await fetch("/api/profile?userId=1"); // 仮のユーザーID。実際は認証されたユーザーのIDを使う
         if (profileResponse.ok) {
           const profileResult = await profileResponse.json();
           if (profileResult.success && profileResult.profile) {
-            setProfile(profileResult.profile);
+            // APIから返されたデータでprofileステートを更新
+            setProfile({
+              personality_type: profileResult.profile.personality_type || "",
+              idea_status: profileResult.profile.idea_status || "",
+              product_genre_ids: profileResult.profile.product_genres?.map((g: any) => g.id) || [],
+              timeslot_ids: profileResult.profile.timeslots?.map((t: any) => t.id) || [],
+              desired_role_in_team: profileResult.profile.desired_role_in_team || "",
+              team_priority_ids: profileResult.profile.team_priorities?.map((tp: any) => tp.id) || [],
+              self_introduction_comment: profileResult.profile.self_introduction_comment || "",
+            });
           }
         }
       } catch (error) {
         console.error("データ読み込みエラー:", error);
+        setErrors(["プロフィールの読み込み中にエラーが発生しました。"]);
       }
     };
 
     loadData();
-  }, []);
+  }, []); // 依存配列が空なので、コンポーネントマウント時に一度だけ実行
 
   const ideaStatuses = [
     { value: "has_specific_idea", label: "具体的な開発アイデアを持っている" },
@@ -87,12 +100,19 @@ export default function ProfileSetupScreen({ onNavigate }: ProfileSetupScreenPro
     setSuccessMessage("");
 
     try {
+      // 送信前に `product_genre_ids`, `timeslot_ids`, `team_priority_ids` を
+      // 配列の `id` だけにする必要がある場合、ここで整形
+      const profileDataToSend = {
+        userId: 1, // TODO: 実際のログインユーザーIDを使用する
+        ...profile,
+      };
+
       const response = await fetch("/api/profile", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(profile),
+        body: JSON.stringify(profileDataToSend),
       });
 
       const data = await response.json();
@@ -114,45 +134,51 @@ export default function ProfileSetupScreen({ onNavigate }: ProfileSetupScreenPro
   };
 
   const toggleProductGenre = (genreId: number) => {
-    if (profile.product_genre_ids.includes(genreId)) {
-      setProfile({
-        ...profile,
-        product_genre_ids: profile.product_genre_ids.filter((id) => id !== genreId),
-      });
-    } else {
-      setProfile({
-        ...profile,
-        product_genre_ids: [...profile.product_genre_ids, genreId],
-      });
-    }
+    setProfile((prevProfile) => {
+      if (prevProfile.product_genre_ids.includes(genreId)) {
+        return {
+          ...prevProfile,
+          product_genre_ids: prevProfile.product_genre_ids.filter((id) => id !== genreId),
+        };
+      } else {
+        return {
+          ...prevProfile,
+          product_genre_ids: [...prevProfile.product_genre_ids, genreId],
+        };
+      }
+    });
   };
 
   const toggleTimeslot = (timeslotId: number) => {
-    if (profile.timeslot_ids.includes(timeslotId)) {
-      setProfile({
-        ...profile,
-        timeslot_ids: profile.timeslot_ids.filter((id) => id !== timeslotId),
-      });
-    } else {
-      setProfile({
-        ...profile,
-        timeslot_ids: [...profile.timeslot_ids, timeslotId],
-      });
-    }
+    setProfile((prevProfile) => {
+      if (prevProfile.timeslot_ids.includes(timeslotId)) {
+        return {
+          ...prevProfile,
+          timeslot_ids: prevProfile.timeslot_ids.filter((id) => id !== timeslotId),
+        };
+      } else {
+        return {
+          ...prevProfile,
+          timeslot_ids: [...prevProfile.timeslot_ids, timeslotId],
+        };
+      }
+    });
   };
 
   const toggleTeamPriority = (priorityId: number) => {
-    if (profile.team_priority_ids.includes(priorityId)) {
-      setProfile({
-        ...profile,
-        team_priority_ids: profile.team_priority_ids.filter((id) => id !== priorityId),
-      });
-    } else {
-      setProfile({
-        ...profile,
-        team_priority_ids: [...profile.team_priority_ids, priorityId],
-      });
-    }
+    setProfile((prevProfile) => {
+      if (prevProfile.team_priority_ids.includes(priorityId)) {
+        return {
+          ...prevProfile,
+          team_priority_ids: prevProfile.team_priority_ids.filter((id) => id !== priorityId),
+        };
+      } else {
+        return {
+          ...prevProfile,
+          team_priority_ids: [...prevProfile.team_priority_ids, priorityId],
+        };
+      }
+    });
   };
 
   if (!masterData) {
