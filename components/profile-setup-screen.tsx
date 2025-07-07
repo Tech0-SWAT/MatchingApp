@@ -1,280 +1,402 @@
-// components/profile-setup-screen.tsx
-
+// components/profile-setup-screen.tsx - 正しいコンポーネント
 "use client";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Brain, Lightbulb, Package, Clock, Users, Target, MessageSquare, AlertCircle, CheckCircle } from "lucide-react";
+import { ArrowLeft, Save, User, Briefcase, Clock, Target, Heart, LogOut } from "lucide-react";
 
 interface ProfileSetupScreenProps {
-  onNavigate: (screen: string, data?: any) => void;
+  onNavigate?: (screen: string) => void;
+  currentUser?: any;
+  isFirstLogin?: boolean;
 }
 
-interface MasterData {
-  productGenres: Array<{ id: number; name: string }>;
-  timeslots: Array<{ id: number; description: string; day_type: string; sort_order: number | null }>;
-  teamPriorities: Array<{ id: number; name: string }>;
-  courseSteps: Array<{ id: number; name: string; start_date: string | null; end_date: string | null }>;
-}
+const roleTypes = [
+  { value: "", label: "柔軟に対応" },
+  { value: "biz", label: "Biz（ビジネス）" },
+  { value: "tech", label: "Tech（技術）" },
+  { value: "design", label: "Design（デザイン）" },
+];
 
-export default function ProfileSetupScreen({ onNavigate }: ProfileSetupScreenProps) {
-  const [profile, setProfile] = useState({
+const ideaStatuses = [
+  { value: "", label: "特に決まっていない" },
+  { value: "has_specific_idea", label: "具体的な開発アイデアを持っている" },
+  { value: "has_rough_theme", label: "おおまかなテーマや興味分野がある" },
+  { value: "wants_to_brainstorm", label: "アイデア出しから一緒に考えたい" },
+  { value: "wants_to_participate", label: "他の人のアイデアに積極的に参加したい" },
+];
+
+const productGenres = [
+  { id: 1, name: "業務効率化・SaaS" },
+  { id: 2, name: "教育・学習支援" },
+  { id: 3, name: "ヘルスケア・ウェルネス" },
+  { id: 4, name: "エンターテイメント・ゲーム" },
+  { id: 5, name: "Eコマース・マーケットプレイス" },
+  { id: 6, name: "コミュニケーション・SNS" },
+  { id: 7, name: "AI・機械学習を活用したプロダクト" },
+  { id: 8, name: "ソーシャルグッド・地域活性化" },
+  { id: 9, name: "ジャンルには特にこだわらない" },
+];
+
+const weekdayTimeslots = [
+  { id: 1, name: "平日 朝5時～7時" },
+  { id: 2, name: "平日 7時～9時" },
+  { id: 3, name: "平日 18時～20時" },
+  { id: 4, name: "平日 20時～22時" },
+  { id: 5, name: "平日 22時～24時" },
+  { id: 6, name: "平日 いつでも良い" },
+];
+
+const weekendTimeslots = [
+  { id: 7, name: "土日祝 0時～2時" },
+  { id: 8, name: "土日祝 2時～4時" },
+  { id: 9, name: "土日祝 4時～6時" },
+  { id: 10, name: "土日祝 6時～8時" },
+  { id: 11, name: "土日祝 8時～10時" },
+  { id: 12, name: "土日祝 10時～12時" },
+  { id: 13, name: "土日祝 12時～14時" },
+  { id: 14, name: "土日祝 14時～16時" },
+  { id: 15, name: "土日祝 16時～18時" },
+  { id: 16, name: "土日祝 18時～20時" },
+  { id: 17, name: "土日祝 20時～22時" },
+  { id: 18, name: "土日祝 22時～24時" },
+  { id: 19, name: "土日祝 いつでも良い" },
+];
+
+const teamPriorities = [
+  { id: 1, name: "学習・成長を重視" },
+  { id: 2, name: "プロダクトの完成度を重視" },
+  { id: 3, name: "チームワークを重視" },
+  { id: 4, name: "新しい技術への挑戦" },
+  { id: 5, name: "ビジネス視点での開発" },
+];
+
+export default function ProfileSetupScreen({ onNavigate, currentUser: initialCurrentUser, isFirstLogin = false }: ProfileSetupScreenProps) {
+  const [formData, setFormData] = useState({
+    desired_role_in_team: "",
     personality_type: "",
     idea_status: "",
-    product_genre_ids: [] as number[],
-    timeslot_ids: [] as number[],
-    desired_role_in_team: "",
-    team_priority_ids: [] as number[],
     self_introduction_comment: "",
+    product_genre_ids: [] as number[],
+    weekday_timeslot_ids: [] as number[],
+    weekend_timeslot_ids: [] as number[],
+    team_priority_ids: [] as number[],
   });
 
-  const [masterData, setMasterData] = useState<MasterData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<string[]>([]);
-  const [successMessage, setSuccessMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // マスターデータとプロフィール読み込み
-  useEffect(() => {
-    const loadData = async () => {
+  // currentUser を確実に有効な値にする
+  const currentUser = {
+    id: initialCurrentUser?.id || 1,
+    name: initialCurrentUser?.name || "デモユーザー",
+    email: initialCurrentUser?.email || "demo@example.com",
+    ...initialCurrentUser,
+  };
+
+  // 安全なナビゲーション関数
+  const safeNavigate = (destination: string) => {
+    console.log(`ナビゲーション要求: ${destination}`);
+
+    if (onNavigate && typeof onNavigate === "function") {
       try {
-        // マスターデータ取得
-        const masterResponse = await fetch("/api/master-data");
-        if (masterResponse.ok) {
-          const masterResult = await masterResponse.json();
-          if (masterResult.success) {
-            setMasterData(masterResult.data);
-          }
+        onNavigate(destination);
+      } catch (error) {
+        console.error("onNavigate エラー:", error);
+        handleFallbackNavigation(destination);
+      }
+    } else {
+      handleFallbackNavigation(destination);
+    }
+  };
+
+  // フォールバック用のナビゲーション
+  const handleFallbackNavigation = (destination: string) => {
+    const messages: { [key: string]: string } = {
+      "search-results": "仲間探し画面への移動がリクエストされました",
+      login: "ログイン画面に移動します",
+    };
+
+    const message = messages[destination] || `${destination} への移動がリクエストされました`;
+
+    if (destination === "login") {
+      window.location.href = "/login";
+    } else {
+      alert(`${message}\n（実装状況に応じて適切な画面に移動してください）`);
+    }
+  };
+
+  // ログアウト処理
+  const handleLogout = async () => {
+    if (!confirm("ログアウトしますか？未保存の変更は失われます。")) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+    console.log("ログアウト処理開始...");
+
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await response.json();
+      console.log("ログアウトAPI結果:", data);
+
+      if (data.success) {
+        console.log("✅ サーバー側ログアウト成功");
+
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+          console.log("✅ ローカルストレージクリア完了");
+        } catch (storageError) {
+          console.warn("ストレージクリアエラー:", storageError);
         }
 
-        // プロフィール取得（編集時）
-        // TODO: 実際のログインユーザーIDを使用する
-        const profileResponse = await fetch("/api/profile?userId=1"); // 仮のユーザーID。実際は認証されたユーザーのIDを使う
-        if (profileResponse.ok) {
-          const profileResult = await profileResponse.json();
-          if (profileResult.success && profileResult.profile) {
-            // APIから返されたデータでprofileステートを更新
-            setProfile({
-              personality_type: profileResult.profile.personality_type || "",
-              idea_status: profileResult.profile.idea_status || "",
-              product_genre_ids: profileResult.profile.product_genres?.map((g: any) => g.id) || [],
-              timeslot_ids: profileResult.profile.timeslots?.map((t: any) => t.id) || [],
-              desired_role_in_team: profileResult.profile.desired_role_in_team || "",
-              team_priority_ids: profileResult.profile.team_priorities?.map((tp: any) => tp.id) || [],
-              self_introduction_comment: profileResult.profile.self_introduction_comment || "",
-            });
+        alert("ログアウトしました。ログイン画面に移動します。");
+        safeNavigate("login");
+      } else {
+        console.error("❌ サーバー側ログアウト失敗:", data.error);
+        alert(`ログアウトエラー: ${data.error}`);
+      }
+    } catch (error) {
+      console.error("❌ ログアウトネットワークエラー:", error);
+
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+        console.log("⚠️ ネットワークエラーだが、ローカルストレージはクリアしました");
+      } catch (storageError) {
+        console.warn("ストレージクリアエラー:", storageError);
+      }
+
+      if (confirm("ネットワークエラーが発生しましたが、ローカルのデータはクリアされました。\nログイン画面に移動しますか？")) {
+        safeNavigate("login");
+      }
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  // プロフィール情報を読み込み
+  useEffect(() => {
+    const loadProfile = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch("/api/profile");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.user?.profile) {
+            const profile = data.user.profile;
+            setFormData((prev) => ({
+              ...prev,
+              desired_role_in_team: profile.desired_role_in_team || "",
+              personality_type: profile.personality_type || "",
+              idea_status: profile.idea_status || "",
+              self_introduction_comment: profile.self_introduction_comment || "",
+              product_genre_ids: data.user.product_genres?.map((g: any) => g.id) || [],
+              weekday_timeslot_ids: data.user.timeslots?.filter((t: any) => t.day_type === "weekday")?.map((t: any) => t.id) || [],
+              weekend_timeslot_ids: data.user.timeslots?.filter((t: any) => t.day_type === "weekend_holiday")?.map((t: any) => t.id) || [],
+              team_priority_ids: data.user.team_priorities?.map((p: any) => p.id) || [],
+            }));
           }
         }
       } catch (error) {
-        console.error("データ読み込みエラー:", error);
-        setErrors(["プロフィールの読み込み中にエラーが発生しました。"]);
+        console.error("プロフィール読み込みエラー:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
+    loadProfile();
+  }, []);
 
-    loadData();
-  }, []); // 依存配列が空なので、コンポーネントマウント時に一度だけ実行
+  const handleInputChange = (field: string, value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
 
-  const ideaStatuses = [
-    { value: "has_specific_idea", label: "具体的な開発アイデアを持っている" },
-    { value: "has_rough_theme", label: "おおまかなテーマや興味分野がある" },
-    { value: "wants_to_brainstorm", label: "アイデア出しから一緒に考えたい" },
-    { value: "wants_to_participate", label: "他の人のアイデアに積極的に参加したい" },
-  ];
-
-  const teamRoles = [
-    { value: "", label: "こだわらない" },
-    { value: "biz", label: "Biz" },
-    { value: "tech", label: "Tech" },
-    { value: "design", label: "Design" },
-  ];
+  const handleArrayChange = (field: string, id: number, checked: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: checked ? [...(prev[field as keyof typeof prev] as number[]), id] : (prev[field as keyof typeof prev] as number[]).filter((item) => item !== id),
+    }));
+  };
 
   const handleSave = async () => {
-    setIsLoading(true);
-    setErrors([]);
-    setSuccessMessage("");
+    setIsSaving(true);
+    setMessage(null);
 
     try {
-      // 送信前に `product_genre_ids`, `timeslot_ids`, `team_priority_ids` を
-      // 配列の `id` だけにする必要がある場合、ここで整形
-      const profileDataToSend = {
-        userId: 1, // TODO: 実際のログインユーザーIDを使用する
-        ...profile,
-      };
-
       const response = await fetch("/api/profile", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(profileDataToSend),
+        body: JSON.stringify({
+          userId: currentUser?.id || 1,
+          ...formData,
+          timeslot_ids: [...formData.weekday_timeslot_ids, ...formData.weekend_timeslot_ids],
+        }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setSuccessMessage("プロフィールが正常に保存されました");
+        setMessage({ type: "success", text: "プロフィールが正常に保存されました！" });
         setTimeout(() => {
-          onNavigate("search-results", profile);
-        }, 1500);
+          safeNavigate("search-results");
+        }, 2000);
       } else {
-        setErrors(data.errors || [data.error || "保存に失敗しました"]);
+        setMessage({ type: "error", text: data.error || "保存に失敗しました" });
       }
     } catch (error) {
       console.error("保存エラー:", error);
-      setErrors(["ネットワークエラーが発生しました。再度お試しください。"]);
+      setMessage({ type: "error", text: "ネットワークエラーが発生しました" });
     } finally {
-      setIsLoading(false);
+      setIsSaving(false);
     }
   };
 
-  const toggleProductGenre = (genreId: number) => {
-    setProfile((prevProfile) => {
-      if (prevProfile.product_genre_ids.includes(genreId)) {
-        return {
-          ...prevProfile,
-          product_genre_ids: prevProfile.product_genre_ids.filter((id) => id !== genreId),
-        };
-      } else {
-        return {
-          ...prevProfile,
-          product_genre_ids: [...prevProfile.product_genre_ids, genreId],
-        };
-      }
-    });
-  };
-
-  const toggleTimeslot = (timeslotId: number) => {
-    setProfile((prevProfile) => {
-      if (prevProfile.timeslot_ids.includes(timeslotId)) {
-        return {
-          ...prevProfile,
-          timeslot_ids: prevProfile.timeslot_ids.filter((id) => id !== timeslotId),
-        };
-      } else {
-        return {
-          ...prevProfile,
-          timeslot_ids: [...prevProfile.timeslot_ids, timeslotId],
-        };
-      }
-    });
-  };
-
-  const toggleTeamPriority = (priorityId: number) => {
-    setProfile((prevProfile) => {
-      if (prevProfile.team_priority_ids.includes(priorityId)) {
-        return {
-          ...prevProfile,
-          team_priority_ids: prevProfile.team_priority_ids.filter((id) => id !== priorityId),
-        };
-      } else {
-        return {
-          ...prevProfile,
-          team_priority_ids: [...prevProfile.team_priority_ids, priorityId],
-        };
-      }
-    });
-  };
-
-  if (!masterData) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8F9FA]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#5D70F7] mx-auto mb-4"></div>
-          <p className="text-[#6C757D]">データを読み込んでいます...</p>
+          <p className="text-[#6C757D]">プロフィール情報を読み込んでいます...</p>
         </div>
       </div>
     );
   }
 
-  // 時間帯を平日・土日祝で分ける
-  const weekdayTimeslots = masterData.timeslots.filter((t) => t.day_type === "weekday").sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const weekendTimeslots = masterData.timeslots.filter((t) => t.day_type === "weekend_holiday").sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
   return (
     <div className="min-h-screen p-4 bg-[#F8F9FA]">
       <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-[#343A40] mb-2">プロフィール情報登録</h1>
-          <p className="text-[#6C757D]">あなたの情報を入力して、最適なチームメンバーを見つけましょう</p>
+        {/* ヘッダー */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            {!isFirstLogin && (
+              <Button onClick={() => safeNavigate("search-results")} variant="ghost" size="sm">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                戻る
+              </Button>
+            )}
+            <div>
+              <h1 className="text-2xl font-semibold text-[#343A40]">{isFirstLogin ? "プロフィール設定（初回登録）" : "プロフィール設定"}</h1>
+              <p className="text-[#6C757D]">{isFirstLogin ? "マッチングを開始するために、まずあなたの情報を教えてください" : "あなたの情報を設定して、最適なマッチングを実現しましょう"}</p>
+            </div>
+          </div>
+
+          {/* ログアウトボタン */}
+          <Button onClick={handleLogout} disabled={isLoggingOut} variant="outline" className="border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-white disabled:opacity-50">
+            <LogOut className="w-4 h-4 mr-2" />
+            {isLoggingOut ? "ログアウト中..." : "ログアウト"}
+          </Button>
         </div>
 
-        {/* エラー・成功メッセージ */}
-        {errors.length > 0 && (
-          <Alert className="mb-6 border-red-200 bg-red-50">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">
-              <ul className="list-disc list-inside">
-                {errors.map((error, index) => (
-                  <li key={index}>{error}</li>
-                ))}
-              </ul>
-            </AlertDescription>
+        {/* ユーザー情報表示 */}
+        <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-[#5D70F7] to-[#38C9B9] rounded-full flex items-center justify-center">
+              <User className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800">{currentUser.name}</p>
+              <p className="text-sm text-gray-600">{currentUser.email}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* メッセージ */}
+        {message && (
+          <Alert className={`mb-6 ${message.type === "success" ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
+            <AlertDescription className={message.type === "success" ? "text-green-800" : "text-red-800"}>{message.text}</AlertDescription>
           </Alert>
         )}
 
-        {successMessage && (
-          <Alert className="mb-6 border-green-200 bg-green-50">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">{successMessage}</AlertDescription>
-          </Alert>
-        )}
-
-        <div className="space-y-6">
-          {/* 性格タイプ */}
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-[#343A40] text-lg">
-                <Brain className="w-5 h-5 text-[#38C9B9]" />
-                あなたの性格タイプ（例: MBTI）
+        <div className="space-y-8">
+          {/* 基本情報 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="w-5 h-5 text-[#5D70F7]" />
+                基本情報
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <Input placeholder="例: INFP, ESTJ など具体的に入力" value={profile.personality_type} onChange={(e) => setProfile({ ...profile, personality_type: e.target.value })} className="border-2 border-gray-300 focus:border-[#5D70F7]" maxLength={50} />
+            <CardContent className="space-y-6">
+              <div>
+                <Label htmlFor="personality">性格タイプ（MBTI等）</Label>
+                <Input id="personality" value={formData.personality_type} onChange={(e) => handleInputChange("personality_type", e.target.value)} placeholder="例: INTJ, ENFP など" className="mt-2" />
+              </div>
+
+              <div>
+                <Label htmlFor="role">希望する役割</Label>
+                <RadioGroup value={formData.desired_role_in_team} onValueChange={(value) => handleInputChange("desired_role_in_team", value)} className="mt-2">
+                  {roleTypes.map((role) => (
+                    <div key={role.value} className="flex items-center space-x-2">
+                      <RadioGroupItem value={role.value} id={`role-${role.value}`} />
+                      <Label htmlFor={`role-${role.value}`}>{role.label}</Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </div>
+
+              <div>
+                <Label htmlFor="idea-status">アイデア状況</Label>
+                <RadioGroup value={formData.idea_status} onValueChange={(value) => handleInputChange("idea_status", value)} className="mt-2">
+                  {ideaStatuses.map((status) => (
+                    <div key={status.value} className="flex items-center space-x-2">
+                      <RadioGroupItem value={status.value} id={`idea-${status.value}`} />
+                      <Label htmlFor={`idea-${status.value}`}>{status.label}</Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </div>
             </CardContent>
           </Card>
 
-          {/* アイデア状況 */}
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-[#343A40] text-lg">
-                <Lightbulb className="w-5 h-5 text-[#FFD700]" />
-                開発アイデアの状況
+          {/* 自己紹介 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-[#FF8C42]" />
+                自己紹介
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <RadioGroup value={profile.idea_status} onValueChange={(value) => setProfile({ ...profile, idea_status: value })} className="space-y-3">
-                {ideaStatuses.map((status) => (
-                  <div key={status.value} className="flex items-center space-x-2">
-                    <RadioGroupItem value={status.value} id={status.value} />
-                    <Label htmlFor={status.value} className="text-[#343A40] cursor-pointer">
-                      {status.label}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
+            <CardContent className="space-y-6">
+              <div>
+                <Label htmlFor="introduction">自己紹介・こんな活動がしたい</Label>
+                <Textarea id="introduction" value={formData.self_introduction_comment} onChange={(e) => handleInputChange("self_introduction_comment", e.target.value)} placeholder="あなたの興味や、チームでどんな活動をしたいかを教えてください" className="mt-2" rows={4} />
+              </div>
             </CardContent>
           </Card>
 
-          {/* プロダクトジャンル */}
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-[#343A40] text-lg">
-                <Package className="w-5 h-5 text-[#4CAF50]" />
-                興味のあるプロダクトジャンル（複数選択可）
+          {/* 興味分野 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-[#4CAF50]" />
+                興味のあるプロダクトジャンル
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {masterData.productGenres.map((genre) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {productGenres.map((genre) => (
                   <div key={genre.id} className="flex items-center space-x-2">
-                    <Checkbox id={`genre-${genre.id}`} checked={profile.product_genre_ids.includes(genre.id)} onCheckedChange={() => toggleProductGenre(genre.id)} />
-                    <Label htmlFor={`genre-${genre.id}`} className="text-[#343A40] cursor-pointer text-sm">
+                    <Checkbox id={`genre-${genre.id}`} checked={formData.product_genre_ids.includes(genre.id)} onCheckedChange={(checked) => handleArrayChange("product_genre_ids", genre.id, checked === true)} />
+                    <Label htmlFor={`genre-${genre.id}`} className="text-sm">
                       {genre.name}
                     </Label>
                   </div>
@@ -283,39 +405,37 @@ export default function ProfileSetupScreen({ onNavigate }: ProfileSetupScreenPro
             </CardContent>
           </Card>
 
-          {/* 活動時間帯 */}
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-[#343A40] text-lg">
-                <Clock className="w-5 h-5 text-[#FF8C42]" />
-                活動時間帯（複数選択可）
+          {/* 活動時間 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-[#38C9B9]" />
+                活動可能時間
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* 平日 */}
-              <div className="space-y-3">
-                <h4 className="font-medium text-[#343A40]">平日の活動時間帯</h4>
-                <div className="space-y-2">
-                  {weekdayTimeslots.map((timeslot) => (
-                    <div key={timeslot.id} className="flex items-center space-x-2">
-                      <Checkbox id={`timeslot-${timeslot.id}`} checked={profile.timeslot_ids.includes(timeslot.id)} onCheckedChange={() => toggleTimeslot(timeslot.id)} />
-                      <Label htmlFor={`timeslot-${timeslot.id}`} className="text-[#343A40] cursor-pointer text-sm">
-                        {timeslot.description}
+            <CardContent className="space-y-6">
+              <div>
+                <Label className="text-base font-medium">平日</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                  {weekdayTimeslots.map((slot) => (
+                    <div key={slot.id} className="flex items-center space-x-2">
+                      <Checkbox id={`weekday-${slot.id}`} checked={formData.weekday_timeslot_ids.includes(slot.id)} onCheckedChange={(checked) => handleArrayChange("weekday_timeslot_ids", slot.id, checked === true)} />
+                      <Label htmlFor={`weekday-${slot.id}`} className="text-sm">
+                        {slot.name}
                       </Label>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* 土日祝 */}
-              <div className="space-y-3">
-                <h4 className="font-medium text-[#343A40]">土日祝の活動時間帯</h4>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {weekendTimeslots.map((timeslot) => (
-                    <div key={timeslot.id} className="flex items-center space-x-2">
-                      <Checkbox id={`timeslot-${timeslot.id}`} checked={profile.timeslot_ids.includes(timeslot.id)} onCheckedChange={() => toggleTimeslot(timeslot.id)} />
-                      <Label htmlFor={`timeslot-${timeslot.id}`} className="text-[#343A40] cursor-pointer text-sm">
-                        {timeslot.description}
+              <div>
+                <Label className="text-base font-medium">土日祝</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                  {weekendTimeslots.map((slot) => (
+                    <div key={slot.id} className="flex items-center space-x-2">
+                      <Checkbox id={`weekend-${slot.id}`} checked={formData.weekend_timeslot_ids.includes(slot.id)} onCheckedChange={(checked) => handleArrayChange("weekend_timeslot_ids", slot.id, checked === true)} />
+                      <Label htmlFor={`weekend-${slot.id}`} className="text-sm">
+                        {slot.name}
                       </Label>
                     </div>
                   ))}
@@ -324,42 +444,20 @@ export default function ProfileSetupScreen({ onNavigate }: ProfileSetupScreenPro
             </CardContent>
           </Card>
 
-          {/* チームでの役割 */}
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-[#343A40] text-lg">
-                <Users className="w-5 h-5 text-[#5D70F7]" />
-                チームでの希望する役割
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup value={profile.desired_role_in_team} onValueChange={(value) => setProfile({ ...profile, desired_role_in_team: value })} className="space-y-3">
-                {teamRoles.map((role) => (
-                  <div key={role.value} className="flex items-start space-x-2">
-                    <RadioGroupItem value={role.value} id={role.value} className="mt-1" />
-                    <Label htmlFor={role.value} className="text-[#343A40] cursor-pointer text-sm leading-relaxed">
-                      {role.label}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-            </CardContent>
-          </Card>
-
-          {/* チームの進め方・雰囲気 */}
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-[#343A40] text-lg">
-                <Target className="w-5 h-5 text-[#38C9B9]" />
-                チームで重視したいこと（複数選択可）
+          {/* チームに求めるもの */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Heart className="w-5 h-5 text-red-500" />
+                チームに求める優先順位
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {masterData.teamPriorities.map((priority) => (
+                {teamPriorities.map((priority) => (
                   <div key={priority.id} className="flex items-center space-x-2">
-                    <Checkbox id={`priority-${priority.id}`} checked={profile.team_priority_ids.includes(priority.id)} onCheckedChange={() => toggleTeamPriority(priority.id)} />
-                    <Label htmlFor={`priority-${priority.id}`} className="text-[#343A40] cursor-pointer text-sm">
+                    <Checkbox id={`priority-${priority.id}`} checked={formData.team_priority_ids.includes(priority.id)} onCheckedChange={(checked) => handleArrayChange("team_priority_ids", priority.id, checked === true)} />
+                    <Label htmlFor={`priority-${priority.id}`} className="text-sm">
                       {priority.name}
                     </Label>
                   </div>
@@ -368,29 +466,13 @@ export default function ProfileSetupScreen({ onNavigate }: ProfileSetupScreenPro
             </CardContent>
           </Card>
 
-          {/* 自己紹介・コメント */}
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-[#343A40] text-lg">
-                <MessageSquare className="w-5 h-5 text-[#FF8C42]" />
-                自己紹介・コメント
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                placeholder="これまでのご経験、Tech0での学習で得たこと、このプロジェクトで挑戦したいこと、その他チームメンバーに伝えたいアピールポイントや補足情報など、自由にご記入ください。(ここでの記述もキーワード検索の対象になります)"
-                value={profile.self_introduction_comment}
-                onChange={(e) => setProfile({ ...profile, self_introduction_comment: e.target.value })}
-                className="min-h-[120px] border-2 border-gray-300 focus:border-[#5D70F7] resize-none"
-                maxLength={1000}
-              />
-              <div className="text-right text-sm text-[#6C757D] mt-1">{profile.self_introduction_comment.length}/1000文字</div>
-            </CardContent>
-          </Card>
-
-          <Button onClick={handleSave} disabled={isLoading} className="w-full h-12 bg-[#5D70F7] hover:bg-[#4D60E7] text-white font-medium text-lg disabled:opacity-50">
-            {isLoading ? "保存中..." : "プロフィールを保存する"}
-          </Button>
+          {/* 保存ボタン */}
+          <div className="flex justify-center pb-8">
+            <Button onClick={handleSave} disabled={isSaving} className="w-full max-w-md h-12 bg-[#5D70F7] hover:bg-[#4D60E7] text-white font-medium text-lg disabled:opacity-50">
+              <Save className="w-4 h-4 mr-2" />
+              {isSaving ? "保存中..." : isFirstLogin ? "プロフィールを保存して仲間探しを開始" : "プロフィールを保存"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

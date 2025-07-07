@@ -1,23 +1,22 @@
+// lib/prisma.ts
+
 import { PrismaClient } from "@prisma/client";
-import path from "path";
-import { fileURLToPath } from "url";
 
-// Compute absolute path to the SQLite file reliably, even after Next.js build.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const dbPath = path.resolve(__dirname, "../prisma/dev.db");
-const dbUrl = `file:${dbPath}`;
+declare global {
+  var __prisma: PrismaClient | undefined;
+}
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+let prisma: PrismaClient;
 
-const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  datasources: { db: { url: dbUrl } }
-});
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV === "production") {
+  prisma = new PrismaClient();
+} else {
+  if (!global.__prisma) {
+    global.__prisma = new PrismaClient({
+      log: ["query", "error", "warn"],
+    });
+  }
+  prisma = global.__prisma;
 }
 
 export default prisma;
