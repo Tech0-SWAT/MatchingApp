@@ -1,169 +1,148 @@
-# Student Matching App - 完全セットアップ情報
+Student Matching App - セットアップガイド
+プロジェクトチーム編成を支援するマッチングアプリケーションです。プロフィール、スキル、活動時間などを基に最適なチームメンバーを提案します。
+🏗️ 技術構成
 
-**GitHubリポジトリ:** https://github.com/Tech0-SWAT/MatchingApp
+フロントエンド: Next.js 14 + React + TypeScript + Tailwind CSS
+バックエンド: Next.js API Routes + Prisma ORM
+データベース: SQLite (開発用)
+認証: JWT + bcryptjs
+AI 機能: OpenAI API (オプション)
 
-## 🏗️ アーキテクチャ
-**フルスタック Next.js アプリケーション（学生マッチングアプリ）**
+🚀 セットアップ手順
+前提条件
 
-* **フロントエンド**: Next.js 14 + React + TypeScript
-* **バックエンド**: Next.js API Routes（同一プロジェクト内）
-* **データベース**: Prisma ORM + SQLite（開発環境）
-* **UI**: Tailwind CSS + Radix UI + shadcn/ui
-* **認証**: bcryptjs + JSON Web Token (JWT)
-* **AI機能**: OpenAI API（自動フォールバック対応）
+Node.js v18 以上
+npm
 
-## 🚀 セットアップ手順
+1. プロジェクトを取得
+   bashgit clone https://github.com/Tech0-SWAT/MatchingApp.git
+   cd MatchingApp
+2. 依存関係をインストール
+   bashnpm install
+3. 環境変数を設定
+   bash# .env.example から.env ファイルを作成
+   cp .env.example .env
+   重要: .env ファイルで以下を設定してください：
+   JWT_SECRET の作成方法
+   認証用の秘密鍵を生成します：
+   bash# ターミナルで実行して秘密鍵を生成
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   出力された文字列（例：c4f2a8b9d5e7f1a3b8c2d9e6f4a7b3c8）を.env ファイルに設定します：
+   bash# 必須: データベースファイルの場所
+   DATABASE_URL="file:./prisma/dev.db"
 
-```bash
-# リポジトリクローン
-git clone https://github.com/Tech0-SWAT/MatchingApp.git
-cd MatchingApp
+# 必須: 認証用の秘密鍵（上記で生成した文字列に変更）
 
-# 依存関係インストール
-npm install
+JWT_SECRET=your-jwt-secret-key-here
 
-# Prismaセットアップ
-npx prisma generate
-npx prisma db push
+# オプション: AI 機能を使用する場合のみ設定
 
-# シードデータ投入（オプション）
-npm run db:seed
+OPENAI_API_KEY=your-openai-api-key-here 4. データベースをセットアップ
+bash# データベースとテーブルを作成
+npx prisma migrate dev
 
-# 開発サーバー起動
-npm run dev
-```
+# サンプルデータを投入
 
-**アクセス:** http://localhost:3000
+npm run db:seed 5. アプリを起動
+bashnpm run dev 6. アクセス
 
-## 📝 環境変数ファイル（.env）
-プロジェクトルートに作成: `MatchingApp/.env`
+アプリケーション: http://localhost:3000
+初期ユーザー: tanaka@example.com / パスワード: Soarainori1
 
-```bash
-# Environment variables declared in this file are automatically made available to Prisma.
-
-# SQLite database connection URL (for local development)
-DATABASE_URL="file:./prisma/dev.db"
-
-# JWT Secret for authentication
-JWT_SECRET=your-super-secret-jwt-key-12345
-
-# OpenAI API Key for matching functionality
-# APIキーが設定されている場合は自動的にOpenAI APIを使用
-# API制限やエラー時は自動的にハードコードマッチングにフォールバック
-OPENAI_API_KEY=your-openai-api-key-here
-
-# ====== 以前のデータベース設定（保存用） ======
-# Azure MySQL (現在は使用停止)
-# DATABASE_URL="mysql://tech0admin:Soarainori1@mysql-stmatching1.mysql.database.azure.com:3306/team_matching_system"
-```
-
-## 🎯 重要な修正情報
-**最新修正 (2025/7/8)**: ページリロード時のログアウト問題を解決済み
-- 認証チェックAPIのPrismaフィールド名修正
-- 認証エンドポイントの `/api/auth/` 配下への統一
-- 認証状態の永続化改善
-
-## 📁 主要ディレクトリ構造
-
-```
-MatchingApp/
-├── app/
-│   ├── api/                    # API エンドポイント
-│   │   ├── auth/              # 認証関連API
-│   │   ├── matching/          # マッチング機能API
-│   │   ├── profile/           # プロフィール管理API
-│   │   └── users/             # ユーザー管理API
-│   ├── globals.css            # グローバルスタイル
-│   ├── layout.tsx             # ルートレイアウト
-│   └── page.tsx               # メインページ
-├── components/
-│   ├── ui/                    # shadcn/ui コンポーネント
-│   ├── login-screen.tsx       # ログイン画面
-│   ├── profile-setup-screen.tsx # プロフィール設定
-│   ├── search-results-screen.tsx # 検索結果画面
-│   └── team-management-screen.tsx # チーム管理画面
-├── prisma/
-│   ├── dev.db                 # SQLite データベース
-│   ├── schema.prisma          # データベーススキーマ
-│   └── seed.ts                # シードデータ
-└── lib/
-    ├── prisma.ts              # Prisma クライアント
-    └── utils.ts               # ユーティリティ関数
-```
-
-## 🔧 利用可能なコマンド
-
-```bash
-# 開発サーバー起動
+🔧 主要コマンド
+bash# 開発サーバー起動
 npm run dev
 
 # プロダクションビルド
-npm run build
 
-# プロダクションサーバー起動
-npm run start
+npm run build && npm run start
 
-# データベースシード実行
-npm run db:seed
+# データベース管理画面を開く
 
-# Prisma Studio起動（データベース管理UI）
 npx prisma studio
-```
 
-## 🎨 主要機能
+# テストデータを再投入
 
-- ✅ **ユーザー認証**: ログイン/ログアウト/新規登録
-- ✅ **プロフィール管理**: スキル、経験、希望役割の設定
-- ✅ **学生マッチング**: OpenAI APIによる高精度マッチング
-- ✅ **チーム管理**: チーム作成・参加・管理
-- ✅ **レスポンシブUI**: モバイル/デスクトップ対応
+npm run db:seed
+🔑 環境変数の説明
+変数名必須説明 DATABASE_URL✅SQLite データベースファイルのパス JWT_SECRET✅ 認証トークン用の秘密鍵（32 文字のランダム文字列）OPENAI_API_KEY⭕AI マッチング機能用（なくても基本機能は動作）
+JWT_SECRET について
+ユーザーのログイン状態を管理するための秘密鍵です。アプリがユーザーを識別し、認証を行うために使用されます。上記の手順で生成した 32 文字のランダム文字列を設定してください。
+🎯 主要機能
 
-## 🔑 認証機能
+✅ ユーザー認証: 安全なログイン/登録システム
+✅ プロフィール管理: スキル、経験、希望役割の設定
+✅ スマートマッチング: AI または独自アルゴリズムによる相性判定
+✅ チーム管理: チーム作成・参加・メンバー管理
+✅ レスポンシブデザイン: PC・スマホ対応
 
-- **JWT認証**: HTTPOnlyクッキーベース
-- **パスワードハッシュ化**: bcryptjs使用
-- **セッション管理**: ページリロード対応
-- **認証エンドポイント**: `/api/auth/*`
+🚨 トラブルシューティング
+よくある問題
 
-## 🤖 AI マッチング機能
+1. データベース関連エラー
+   bash# データベースをリセット
+   npx prisma migrate reset
+   npm run db:seed
+2. モジュール関連エラー
+   bash# 依存関係を再インストール
+   rm -rf node_modules package-lock.json
+   npm install
+3. 認証エラー
 
-- **OpenAI API統合**: GPT-4ベースの高精度マッチング
-- **自動フォールバック**: API制限時にハードコードマッチング
-- **カスタムアルゴリズム**: スキル、経験、性格を総合評価
+.env ファイルの JWT_SECRET が正しく設定されているか確認
+JWT_SECRET を再生成して設定し直す
+ブラウザのクッキーをクリア
 
-## 🗄️ データベース
+4. OpenAI API エラー（AI マッチング使用時）
 
-- **SQLite**: 軽量で設定不要
-- **Prisma ORM**: 型安全なデータベース操作
-- **マイグレーション**: スキーマ変更の履歴管理
-- **シードデータ**: 開発用テストデータ自動投入
+.env の OPENAI_API_KEY が正しく設定されているか確認
+API キーの先頭に余分な文字（=など）がないか確認
 
-## 🚨 注意事項
+5. 依存関係の問題
+   bash# 必要な依存関係が正しくインストールされているか確認
+   npm list --depth=0
 
-1. **データベースパス**: 環境に応じて `DATABASE_URL` を調整
-2. **OpenAI APIキー**: 必須ではないが、高精度マッチングには必要
-3. **JWT_SECRET**: 本番環境では強力なシークレットキーに変更
-4. **Node.js**: v18以上推奨
+# 不足している場合は再インストール
 
-## 🆘 トラブルシューティング
-
-**データベース接続エラー**:
-```bash
-npx prisma db push
-npx prisma generate
-```
-
-**依存関係エラー**:
-```bash
 rm -rf node_modules package-lock.json
 npm install
-```
+開発環境の確認
+bash# Node.js バージョン確認
+node --version # v18 以上必要
 
-**認証エラー**:
-- `.env` ファイルの `JWT_SECRET` を確認
-- ブラウザのクッキーをクリア
+# 環境変数確認
 
----
+cat .env
 
-**作成日**: 2025年7月7日  
-**最終更新**: 認証システム修正完了時点
+# データベース状態確認
+
+npx prisma studio
+📁 プロジェクト構造
+MatchingApp/
+├── app/ # Next.js App Router
+│ ├── api/ # API エンドポイント
+│ ├── globals.css # グローバルスタイル
+│ └── page.tsx # メインページ
+├── components/ # React コンポーネント
+├── prisma/ # データベース設定
+│ ├── schema.prisma # DB スキーマ定義
+│ └── seed.ts # サンプルデータ
+├── lib/ # ユーティリティ
+└── .env.example # 環境変数テンプレート
+🤝 コントリビューション
+
+このリポジトリをフォーク
+フィーチャーブランチを作成 (git checkout -b feature/amazing-feature)
+変更をコミット (git commit -m 'Add amazing feature')
+ブランチをプッシュ (git push origin feature/amazing-feature)
+プルリクエストを作成
+
+⚠️ セキュリティ注意事項
+
+本番環境では:
+
+JWT_SECRET を新しく生成し直す
+DATABASE_URL を本番データベースに変更
+.env ファイルを Git にコミットしない（.gitignore で除外済み）
+
+作成: Tech0-SWAT Team
