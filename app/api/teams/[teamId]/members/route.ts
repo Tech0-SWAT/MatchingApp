@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 // ★ 修正: lib/prisma.ts へのインポートパスをプロジェクト構造に合わせて修正
 // app/api/teams/[teamId]/route.ts から見た lib/prisma.ts への相対パス
 // (ルートまで上がる ../../../../ と、そこから lib に降りる lib/prisma)
-import prisma from "../../../../../lib/prisma";
+import prisma from "@/lib/prisma";
 
 // チームメンバー管理API
 export async function POST(request: NextRequest, { params }: { params: { teamId: string } }) {

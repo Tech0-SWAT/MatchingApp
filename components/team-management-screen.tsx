@@ -1,4 +1,4 @@
-// components/team-management-screen.tsx - 既存API対応版
+// components/team-management-screen.tsx - 修正版（重複表示を解消）
 "use client";
 
 import { useState, useEffect } from "react";
@@ -224,20 +224,40 @@ export default function TeamManagementScreen({ onNavigate, currentUser }: TeamMa
     });
   };
 
-  // 既存APIを使用したチーム取得
+  // 🛠️ 修正: APIパラメータを正しく設定 + JSONエラー対応
   const fetchTeams = async () => {
     try {
       console.log("📡 チーム取得開始:", { filter, currentUserId: currentUser.id });
 
       let url = "/api/teams";
 
+      // ✅ 修正: 正しいパラメータ名を使用
       if (filter === "my-teams") {
-        url += "?userId=current"; // 既存APIの仕様に合わせる
+        url += `?user_id=${currentUser.id}`;
       }
 
-      const response = await fetch(url);
-      const data = await response.json();
+      console.log("📡 リクエストURL:", url);
 
+      const response = await fetch(url);
+
+      // ✅ 修正: レスポンス状態とContent-Typeを確認
+      console.log("📡 レスポンス状態:", response.status, response.statusText);
+      console.log("📡 Content-Type:", response.headers.get("content-type"));
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ API Error Response:", errorText);
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const responseText = await response.text();
+        console.error("❌ Invalid Content-Type. Response:", responseText);
+        throw new Error("サーバーから無効なレスポンス形式が返されました");
+      }
+
+      const data = await response.json();
       console.log("📡 チーム取得レスポンス:", data);
 
       if (data.success && Array.isArray(data.teams)) {
@@ -341,12 +361,13 @@ export default function TeamManagementScreen({ onNavigate, currentUser }: TeamMa
           .map((user: any) => ({
             id: user.id,
             name: user.name,
+            email: user.email || `user${user.id}@example.com`, // ✅ 修正: emailフィールドを追加
             // APIのprofileを期待するuser_profilesに変換
             user_profiles: user.profile
               ? {
                   desired_role_in_team: user.profile.desired_role_in_team,
                   personality_type: user.profile.personality_type,
-                  self_introduction_comment: null,
+                  self_introduction_comment: user.profile.self_introduction_comment || null,
                 }
               : null,
           }));
@@ -364,6 +385,7 @@ export default function TeamManagementScreen({ onNavigate, currentUser }: TeamMa
         {
           id: 2,
           name: "田中太郎",
+          email: "tanaka@example.com",
           user_profiles: {
             desired_role_in_team: "tech",
             personality_type: "INTJ",
@@ -373,6 +395,7 @@ export default function TeamManagementScreen({ onNavigate, currentUser }: TeamMa
         {
           id: 3,
           name: "佐藤花子",
+          email: "sato@example.com",
           user_profiles: {
             desired_role_in_team: "design",
             personality_type: "ENFP",
@@ -382,6 +405,7 @@ export default function TeamManagementScreen({ onNavigate, currentUser }: TeamMa
         {
           id: 4,
           name: "鈴木一郎",
+          email: "suzuki@example.com",
           user_profiles: {
             desired_role_in_team: "biz",
             personality_type: "ESTJ",
@@ -391,6 +415,7 @@ export default function TeamManagementScreen({ onNavigate, currentUser }: TeamMa
         {
           id: 5,
           name: "山田二郎",
+          email: "yamada@example.com",
           user_profiles: {
             desired_role_in_team: "flexible",
             personality_type: "ISFP",
@@ -400,6 +425,7 @@ export default function TeamManagementScreen({ onNavigate, currentUser }: TeamMa
         {
           id: 6,
           name: "高橋三郎",
+          email: "takahashi@example.com",
           user_profiles: null,
         },
       ];
@@ -606,7 +632,7 @@ export default function TeamManagementScreen({ onNavigate, currentUser }: TeamMa
                             {team.course_step_name}
                           </Badge>
                         </div>
-                        <p className="text-[#6C757D] mb-3">{team.project_name || team.name}</p>
+                        {/* 🎯 修正: 重複していたプロジェクト名表示を削除 */}
                         <div className="flex items-center gap-4 text-sm text-[#6C757D]">
                           <div className="flex items-center gap-1">
                             <Calendar className="w-4 h-4" />
@@ -658,19 +684,21 @@ export default function TeamManagementScreen({ onNavigate, currentUser }: TeamMa
                       </div>
                     </div>
 
-                    {/* プロジェクト情報 */}
-                    <div>
-                      <h4 className="text-md font-semibold text-[#343A40] mb-3 flex items-center gap-2">
-                        <Target className="w-4 h-4 text-[#FF8C42]" />
-                        プロジェクト: {team.project_name || team.name}
-                      </h4>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <p className="text-[#6C757D] mb-3">{team.project_name ? `${team.project_name}のプロジェクト` : `${team.name}のプロジェクト`}</p>
-                        <div className="text-xs text-gray-500">
-                          作成日: {new Date(team.created_at).toLocaleDateString("ja-JP")} | 最終更新: {new Date(team.updated_at).toLocaleDateString("ja-JP")}
+                    {/* プロジェクト情報 - 🎯 修正: project_nameがある場合のみ表示 */}
+                    {team.project_name && (
+                      <div>
+                        <h4 className="text-md font-semibold text-[#343A40] mb-3 flex items-center gap-2">
+                          <Target className="w-4 h-4 text-[#FF8C42]" />
+                          プロジェクト情報
+                        </h4>
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <p className="text-[#343A40] font-medium mb-2">{team.project_name}</p>
+                          <div className="text-xs text-gray-500">
+                            作成日: {new Date(team.created_at).toLocaleDateString("ja-JP")} | 最終更新: {new Date(team.updated_at).toLocaleDateString("ja-JP")}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
               );
@@ -697,8 +725,9 @@ export default function TeamManagementScreen({ onNavigate, currentUser }: TeamMa
                   </div>
 
                   <div>
-                    <Label htmlFor="project-name">プロジェクト名</Label>
-                    <Input id="project-name" value={teamCreationData.project_name} onChange={(e) => setTeamCreationData({ ...teamCreationData, project_name: e.target.value })} placeholder="例：タスク管理アプリ（未入力の場合チーム名が使用されます）" />
+                    <Label htmlFor="project-name">プロジェクト名（オプション）</Label>
+                    <Input id="project-name" value={teamCreationData.project_name} onChange={(e) => setTeamCreationData({ ...teamCreationData, project_name: e.target.value })} placeholder="例：タスク管理アプリ" />
+                    <p className="text-xs text-gray-500 mt-1">※未入力の場合、プロジェクト情報は表示されません</p>
                   </div>
 
                   <div>

@@ -1,486 +1,428 @@
 // app/api/teams/route.ts
-
 import { type NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library"; // Prismaのエラー型をインポート
+import jwt from "jsonwebtoken";
 
-// チーム関連の型定義（Prismaで自動生成される型があるため、これらはコードの理解を助ける目的）
-interface Team {
-  id: number;
-  course_step_id: number;
-  name: string;
-  project_name: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface TeamMembership {
-  id: number;
-  team_id: number;
-  user_id: number;
-  role_in_team: string | null;
-  joined_at: string;
-}
-
-interface TeamWithMembers extends Team {
-  members: Array<{
-    user_id: number;
-    user_name: string;
-    user_email: string;
-    role_in_team: string | null;
-    joined_at: string;
-  }>;
-  course_step_name: string;
-}
-
-interface MemberData {
-  user_id: number;
-  role_in_team: string | null;
-}
-
-// ログインユーザーIDを取得するヘルパー関数
-async function getCurrentUserId(request: NextRequest): Promise<number | null> {
+// JWTトークンからユーザーIDを取得するヘルパー関数
+function getUserIdFromToken(request: NextRequest): number | null {
   try {
-    // TODO: 実際の認証システムからログインユーザーIDを取得する処理をここに実装
-    // 暫定的に固定値を返すが、実際の認証システムに合わせて修正が必要
-    return 1; // 現在ログインしているユーザーID（田中太郎）
+    const token = request.cookies.get("token")?.value;
+    if (!token) {
+      console.log("🔍 JWTトークンが見つかりません");
+      return null;
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback-secret") as { userId: number };
+    console.log("🔍 JWT検証成功, userId:", decoded.userId);
+    return decoded.userId;
   } catch (error) {
-    console.error("ログインユーザーID取得エラー:", error);
+    console.error("❌ JWT verification failed:", error);
     return null;
   }
 }
 
-// チーム作成API
-export async function POST(request: NextRequest) {
+// ✅ GETメソッド - チーム一覧取得
+export async function GET(request: NextRequest) {
   try {
-    const data = await request.json();
-    const { course_step_id, name, project_name, member_data, creator_role } = data;
+    console.log("📡 GET /api/teams - チーム取得開始");
 
-    console.log("=== API: チーム作成リクエスト受信 ===");
-    console.log("Received data:", JSON.stringify(data, null, 2));
-
-    // 作成者のユーザーIDを取得
-    const creatorUserId = await getCurrentUserId(request);
-    if (!creatorUserId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "ログインユーザーの情報を取得できませんでした",
-        },
-        { status: 401 }
-      );
+    // データベース接続確認
+    try {
+      await prisma.$connect();
+      console.log("✅ データベース接続確認完了");
+    } catch (dbError) {
+      console.error("❌ データベース接続失敗:", dbError);
+      throw new Error("データベース接続に失敗しました");
     }
 
-    console.log("Creator user ID:", creatorUserId);
+    const url = new URL(request.url);
+    const userIdParam = url.searchParams.get("user_id");
+    const teamIdParam = url.searchParams.get("teamId");
 
-    // バリデーション
-    if (!course_step_id || !name || !Array.isArray(member_data) || member_data.length === 0) {
-      console.log("❌ 基本項目のバリデーションエラー");
-      return NextResponse.json(
-        {
-          success: false,
-          error: "必須項目が不足しています。チーム名、ステップ、メンバーは必須です。",
-        },
-        { status: 400 }
-      );
-    }
+    console.log("🔍 パラメータ確認:", { userIdParam, teamIdParam });
 
-    if (typeof creator_role !== "string" || creator_role.trim() === "") {
-      console.log("❌ 作成者役割のバリデーションエラー");
-      return NextResponse.json(
-        {
-          success: false,
-          error: "あなたの役割を選択してください。",
-        },
-        { status: 400 }
-      );
-    }
-
-    // member_dataの形式チェック
-    const isValidMemberData = member_data.every((member: any) => typeof member.user_id === "number" && (typeof member.role_in_team === "string" || member.role_in_team === null));
-
-    if (!isValidMemberData) {
-      console.log("❌ メンバーデータの形式エラー");
-      return NextResponse.json(
-        {
-          success: false,
-          error: "メンバーデータの形式が正しくありません。",
-        },
-        { status: 400 }
-      );
-    }
-
-    // メンバーのユーザーIDを抽出
-    const memberUserIds = member_data.map((member: MemberData) => member.user_id);
-    const allMemberIds = [...new Set([creatorUserId, ...memberUserIds])]; // 重複除去
-
-    console.log("Member user IDs:", memberUserIds);
-    console.log("All member IDs (including creator):", allMemberIds);
-
-    // course_stepの存在確認
-    const courseStep = await prisma.course_steps.findUnique({
-      where: { id: course_step_id },
-    });
-
-    if (!courseStep) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "指定されたコースステップが存在しません",
-        },
-        { status: 400 }
-      );
-    }
-
-    // ユーザーIDの存在確認（作成者も含む全メンバー）
-    const users = await prisma.users.findMany({
-      where: { id: { in: allMemberIds } },
-    });
-
-    if (users.length !== allMemberIds.length) {
-      const foundUserIds = new Set(users.map((u) => u.id));
-      const invalidUserIds = allMemberIds.filter((id) => !foundUserIds.has(id));
-      return NextResponse.json(
-        {
-          success: false,
-          error: `存在しないユーザーIDが含まれています: ${invalidUserIds.join(", ")}`,
-        },
-        { status: 400 }
-      );
-    }
-
-    console.log("✅ バリデーション通過、チーム作成開始");
-
-    const newTeam = await prisma.$transaction(async (tx) => {
-      // チーム作成
-      const team = await tx.teams.create({
-        data: {
-          course_step_id,
-          name: name.trim(),
-          project_name: project_name?.trim() || null,
-        },
-      });
-
-      console.log("チーム作成完了:", team.id);
-
-      // メンバーシップデータを準備
-      const membershipData = [
-        // 作成者のメンバーシップ
-        {
-          team_id: team.id,
-          user_id: creatorUserId,
-          role_in_team: creator_role.trim(),
-          joined_at: new Date(),
-          left_at: null,
-        },
-        // その他のメンバーのメンバーシップ（作成者が重複しないようフィルタリング）
-        ...member_data
-          .filter((member: MemberData) => member.user_id !== creatorUserId)
-          .map((member: MemberData) => ({
-            team_id: team.id,
-            user_id: member.user_id,
-            role_in_team: member.role_in_team,
-            joined_at: new Date(),
-            left_at: null,
-          })),
-      ];
-
-      console.log("メンバーシップデータ:", membershipData);
-
-      // メンバーシップを一括作成
-      await tx.team_memberships.createMany({
-        data: membershipData,
-      });
-
-      console.log("メンバーシップ作成完了");
-
-      return team;
-    });
-
-    console.log("チーム作成成功:", {
-      team_id: newTeam.id,
-      course_step_id,
-      name,
-      project_name,
-      creator_user_id: creatorUserId,
-      all_member_ids: allMemberIds,
-      creator_role,
-    });
-
-    return NextResponse.json({
-      success: true,
-      team_id: newTeam.id,
-      message: "チームが正常に作成されました",
-    });
-  } catch (error) {
-    console.error("❌ チーム作成エラー:", error);
-
-    if (error instanceof PrismaClientKnownRequestError) {
-      console.error("チーム作成Prismaエラー (P" + error.code + "):", error.message, "メタデータ:", error.meta);
-      // P2002 はユニーク制約違反
-      if (error.code === "P2002") {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `データベースエラー: この${(error.meta?.target as string[])?.join(", ") || "項目"}は既に存在します。`,
-          },
-          { status: 409 }
-        ); // Conflict
+    // 特定チームの取得
+    if (teamIdParam) {
+      const teamId = parseInt(teamIdParam);
+      if (isNaN(teamId)) {
+        console.log("❌ 無効なチームID:", teamIdParam);
+        return NextResponse.json({ success: false, error: "無効なチームIDです" }, { status: 400 });
       }
-      return NextResponse.json(
-        {
-          success: false,
-          error: `データベースエラー: ${error.message}`,
-        },
-        { status: 500 }
-      );
-    } else if (error instanceof Error) {
-      console.error("チーム作成一般エラー:", error.message, error.stack);
-      return NextResponse.json(
-        {
-          success: false,
-          error: `サーバーエラーが発生しました: ${error.message}`,
-        },
-        { status: 500 }
-      );
+
+      console.log("🔍 特定チーム取得開始, teamId:", teamId);
+
+      try {
+        const team = await prisma.teams.findUnique({
+          where: { id: teamId },
+          include: {
+            course_step: true,
+            team_memberships: {
+              where: { left_at: null },
+              include: {
+                user: true,
+              },
+            },
+          },
+        });
+
+        if (!team) {
+          console.log("❌ チームが見つかりません, teamId:", teamId);
+          return NextResponse.json({ success: false, error: "チームが見つかりません" }, { status: 404 });
+        }
+
+        const formattedTeam = {
+          id: team.id,
+          course_step_id: team.course_step_id,
+          name: team.name,
+          project_name: team.project_name,
+          created_at: team.created_at,
+          updated_at: team.updated_at,
+          course_step_name: team.course_step?.name || "未設定",
+          members: team.team_memberships.map((membership) => ({
+            user_id: membership.user_id,
+            user_name: membership.user.name,
+            user_email: membership.user.email,
+            role_in_team: membership.role_in_team,
+            joined_at: membership.joined_at,
+          })),
+        };
+
+        console.log("✅ 特定チーム取得成功:", formattedTeam.name);
+        return NextResponse.json({ success: true, team: formattedTeam });
+      } catch (teamError) {
+        console.error("❌ 特定チーム取得エラー:", teamError);
+        throw teamError;
+      }
     }
-    console.error("チーム作成不明なエラー:", error);
+
+    // 全チーム取得または特定ユーザーのチーム取得
+    let whereCondition = {};
+
+    if (userIdParam) {
+      const userId = parseInt(userIdParam);
+      if (isNaN(userId)) {
+        console.log("❌ 無効なユーザーID:", userIdParam);
+        return NextResponse.json({ success: false, error: "無効なユーザーIDです" }, { status: 400 });
+      }
+
+      console.log(`🔍 ユーザー ${userId} のチーム取得`);
+
+      // 特定ユーザーが参加しているチームのみ取得
+      whereCondition = {
+        team_memberships: {
+          some: {
+            user_id: userId,
+            left_at: null,
+          },
+        },
+      };
+    } else {
+      console.log("🔍 全チーム取得");
+    }
+
+    console.log("🔍 whereCondition:", JSON.stringify(whereCondition, null, 2));
+
+    try {
+      const teams = await prisma.teams.findMany({
+        where: whereCondition,
+        include: {
+          course_step: true,
+          team_memberships: {
+            where: { left_at: null },
+            include: {
+              user: true,
+            },
+          },
+        },
+        orderBy: { created_at: "desc" },
+      });
+
+      console.log("🔍 取得したチーム数:", teams.length);
+
+      const formattedTeams = teams.map((team) => {
+        try {
+          return {
+            id: team.id,
+            course_step_id: team.course_step_id,
+            name: team.name,
+            project_name: team.project_name,
+            created_at: team.created_at,
+            updated_at: team.updated_at,
+            course_step_name: team.course_step?.name || "未設定",
+            members: team.team_memberships.map((membership) => ({
+              user_id: membership.user_id,
+              user_name: membership.user.name,
+              user_email: membership.user.email,
+              role_in_team: membership.role_in_team,
+              joined_at: membership.joined_at,
+            })),
+          };
+        } catch (formatError) {
+          console.error("❌ チームフォーマットエラー:", formatError, "team:", team);
+          throw formatError;
+        }
+      });
+
+      console.log(`✅ ${formattedTeams.length}件のチームを取得`);
+      return NextResponse.json({ success: true, teams: formattedTeams });
+    } catch (queryError) {
+      console.error("❌ チーム取得クエリエラー:", queryError);
+      throw queryError;
+    }
+  } catch (error) {
+    console.error("❌ チーム取得エラー:", error);
+
+    // エラーの詳細情報をログ出力
+    if (error instanceof Error) {
+      console.error("❌ エラーメッセージ:", error.message);
+      console.error("❌ エラースタック:", error.stack);
+    }
+
     return NextResponse.json(
       {
         success: false,
-        error: "サーバーエラーが発生しました",
+        error: "チーム情報の取得に失敗しました",
+        debug: process.env.NODE_ENV === "development" ? error.message : undefined,
       },
       { status: 500 }
     );
   }
 }
 
-// チーム削除API
-export async function DELETE(request: NextRequest) {
+// ✅ POSTメソッド - チーム作成
+export async function POST(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const teamIdParam = searchParams.get("teamId");
+    console.log("📡 POST /api/teams - チーム作成開始");
+
+    // データベース接続確認
+    try {
+      await prisma.$connect();
+      console.log("✅ データベース接続確認完了");
+    } catch (dbError) {
+      console.error("❌ データベース接続失敗:", dbError);
+      throw new Error("データベース接続に失敗しました");
+    }
+
+    // 認証チェック
+    const currentUserId = getUserIdFromToken(request);
+    if (!currentUserId) {
+      console.log("❌ 認証失敗: ユーザーIDが取得できません");
+      return NextResponse.json({ success: false, error: "認証が必要です" }, { status: 401 });
+    }
+
+    console.log("🔍 認証成功, currentUserId:", currentUserId);
+
+    const data = await request.json();
+    const { course_step_id, name, project_name, member_data, creator_role } = data;
+
+    console.log("🔍 受信データ:", { course_step_id, name, project_name, member_data, creator_role });
 
     // バリデーション
-    if (!teamIdParam) {
-      return NextResponse.json({ success: false, error: "チームIDが指定されていません" }, { status: 400 });
+    if (!course_step_id || !name) {
+      console.log("❌ 必須項目不足:", { course_step_id, name });
+      return NextResponse.json({ success: false, error: "必須項目が不足しています" }, { status: 400 });
     }
 
-    const teamId = parseInt(teamIdParam, 10);
-    if (isNaN(teamId)) {
-      return NextResponse.json({ success: false, error: "無効なチームIDです" }, { status: 400 });
-    }
-
-    // 削除権限チェック用に現在のユーザーIDを取得
-    const currentUserId = await getCurrentUserId(request);
-    if (!currentUserId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "ログインユーザーの情報を取得できませんでした",
-        },
-        { status: 401 }
-      );
-    }
-
-    // チームの存在確認と作成者チェック
-    const team = await prisma.teams.findUnique({
-      where: { id: teamId },
-      include: {
-        team_memberships: {
-          where: { left_at: null },
-          include: { user: true },
-        },
-      },
-    });
-
-    if (!team) {
-      return NextResponse.json({ success: false, error: "指定されたチームが見つかりません" }, { status: 404 });
-    }
-
-    // 削除権限チェック（チームメンバーかつ作成者またはリーダー権限があるユーザー）
-    const currentUserMembership = team.team_memberships.find((m) => m.user_id === currentUserId);
-    if (!currentUserMembership) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "このチームを削除する権限がありません",
-        },
-        { status: 403 }
-      );
-    }
-
-    // チーム削除処理（論理削除）
-    await prisma.$transaction(async (tx) => {
-      // 全メンバーを離脱状態にする（論理削除）
-      await tx.team_memberships.updateMany({
-        where: {
-          team_id: teamId,
-          left_at: null,
-        },
-        data: {
-          left_at: new Date(),
-          updated_at: new Date(),
-        },
+    // コースステップの存在確認
+    try {
+      const courseStep = await prisma.course_steps.findUnique({
+        where: { id: course_step_id },
       });
 
-      // チームテーブル自体は残す（履歴として）が、検索対象外にするため
-      // project_nameに削除マークを付ける（または将来deleted_atカラムを追加）
-      await tx.teams.update({
-        where: { id: teamId },
-        data: {
-          project_name: team.project_name ? `[削除済み] ${team.project_name}` : "[削除済み]",
-          updated_at: new Date(),
-        },
+      if (!courseStep) {
+        console.log("❌ コースステップが見つかりません, course_step_id:", course_step_id);
+        return NextResponse.json({ success: false, error: "指定されたコースステップが見つかりません" }, { status: 404 });
+      }
+
+      console.log("✅ コースステップ確認完了:", courseStep.name);
+    } catch (courseStepError) {
+      console.error("❌ コースステップ確認エラー:", courseStepError);
+      throw courseStepError;
+    }
+
+    // トランザクションでチーム作成
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        console.log("🔍 トランザクション開始");
+
+        // チーム作成
+        const team = await tx.teams.create({
+          data: {
+            course_step_id,
+            name,
+            project_name: project_name || null,
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        });
+
+        console.log("✅ チーム作成完了:", team);
+
+        // 作成者をチームメンバーに追加
+        await tx.team_memberships.create({
+          data: {
+            team_id: team.id,
+            user_id: currentUserId,
+            role_in_team: creator_role || "tech",
+            joined_at: new Date(),
+            left_at: null,
+          },
+        });
+
+        console.log("✅ 作成者をメンバーに追加完了");
+
+        // 追加メンバーがいる場合は追加
+        if (member_data && Array.isArray(member_data) && member_data.length > 0) {
+          console.log("🔍 追加メンバー処理開始, count:", member_data.length);
+
+          for (const member of member_data) {
+            console.log("🔍 メンバー追加処理:", member);
+
+            // ユーザーの存在確認
+            const userExists = await tx.users.findUnique({
+              where: { id: member.user_id },
+            });
+
+            if (userExists) {
+              await tx.team_memberships.create({
+                data: {
+                  team_id: team.id,
+                  user_id: member.user_id,
+                  role_in_team: member.role_in_team || "tech",
+                  joined_at: new Date(),
+                  left_at: null,
+                },
+              });
+              console.log("✅ メンバー追加完了:", userExists.name);
+            } else {
+              console.log("⚠️ ユーザーが見つかりません, user_id:", member.user_id);
+            }
+          }
+        }
+
+        console.log("✅ トランザクション完了");
+        return team;
       });
-    });
 
-    console.log("チーム削除:", {
-      team_id: teamId,
-      team_name: team.name,
-      deleted_by_user_id: currentUserId,
-      member_count: team.team_memberships.length,
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: "チームが正常に削除されました",
-    });
+      console.log(`📡 チーム "${result.name}" が作成されました (ID: ${result.id})`);
+      return NextResponse.json({ success: true, team: result });
+    } catch (transactionError) {
+      console.error("❌ トランザクションエラー:", transactionError);
+      throw transactionError;
+    }
   } catch (error) {
-    console.error("チーム削除エラー:", error);
+    console.error("❌ チーム作成エラー:", error);
+
+    // エラーの詳細情報をログ出力
     if (error instanceof Error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      console.error("❌ エラーメッセージ:", error.message);
+      console.error("❌ エラースタック:", error.stack);
     }
-    return NextResponse.json({ success: false, error: "サーバーエラーが発生しました" }, { status: 500 });
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "チーム作成に失敗しました",
+        debug: process.env.NODE_ENV === "development" ? error.message : undefined,
+      },
+      { status: 500 }
+    );
   }
 }
 
-// チーム一覧取得API
-export async function GET(request: NextRequest) {
+// ✅ DELETEメソッド - チーム削除
+export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userIdParam = searchParams.get("userId");
-    const courseStepIdParam = searchParams.get("courseStepId");
+    console.log("📡 DELETE /api/teams - チーム削除開始");
 
-    let whereClause: any = {};
-
-    // userIdによるフィルタリング (現在参加しているチームのみ)
-    if (userIdParam) {
-      let userId: number;
-
-      if (userIdParam === "current") {
-        const currentUserId = await getCurrentUserId(request);
-        if (!currentUserId) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: "ログインユーザーの情報を取得できませんでした",
-            },
-            { status: 401 }
-          );
-        }
-        userId = currentUserId;
-        console.log("現在のログインユーザーID:", userId);
-      } else {
-        userId = parseInt(userIdParam, 10);
-        if (isNaN(userId)) {
-          return NextResponse.json({ success: false, error: "無効なユーザーIDです" }, { status: 400 });
-        }
-      }
-
-      // team_membershipsを介してユーザーが所属しているチームをフィルタリング
-      whereClause.team_memberships = {
-        some: {
-          user_id: userId,
-          left_at: null, // まだ離脱していないメンバー
-        },
-      };
+    // データベース接続確認
+    try {
+      await prisma.$connect();
+      console.log("✅ データベース接続確認完了");
+    } catch (dbError) {
+      console.error("❌ データベース接続失敗:", dbError);
+      throw new Error("データベース接続に失敗しました");
     }
 
-    // courseStepIdによるフィルタリング
-    if (courseStepIdParam) {
-      const parsedCourseStepId = parseInt(courseStepIdParam, 10);
-      if (isNaN(parsedCourseStepId)) {
-        return NextResponse.json({ success: false, error: "無効なコースステップIDです" }, { status: 400 });
-      }
-      whereClause.course_step_id = parsedCourseStepId;
+    // 認証チェック
+    const currentUserId = getUserIdFromToken(request);
+    if (!currentUserId) {
+      console.log("❌ 認証失敗: ユーザーIDが取得できません");
+      return NextResponse.json({ success: false, error: "認証が必要です" }, { status: 401 });
     }
 
-    // 削除されたチームを除外
-    whereClause.AND = [
-      {
-        OR: [
-          { project_name: null },
-          {
-            project_name: {
-              not: {
-                contains: "[削除済み]",
-              },
-            },
-          },
-        ],
-      },
-    ];
+    console.log("🔍 認証成功, currentUserId:", currentUserId);
 
-    console.log("チーム検索条件:", whereClause);
+    const url = new URL(request.url);
+    const teamIdParam = url.searchParams.get("teamId");
 
-    const teams = await prisma.teams.findMany({
-      where: whereClause,
-      include: {
-        course_step: {
-          select: {
-            name: true,
-          },
-        },
-        team_memberships: {
-          where: {
-            left_at: null, // 現在のメンバーのみ
-          },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
+    console.log("🔍 削除対象チームID:", teamIdParam);
+
+    if (!teamIdParam) {
+      console.log("❌ チームIDが指定されていません");
+      return NextResponse.json({ success: false, error: "チームIDが必要です" }, { status: 400 });
+    }
+
+    const teamId = parseInt(teamIdParam);
+    if (isNaN(teamId)) {
+      console.log("❌ 無効なチームID:", teamIdParam);
+      return NextResponse.json({ success: false, error: "無効なチームIDです" }, { status: 400 });
+    }
+
+    // チームの存在確認と権限チェック
+    try {
+      const team = await prisma.teams.findUnique({
+        where: { id: teamId },
+        include: {
+          team_memberships: {
+            where: { left_at: null },
           },
         },
-      },
-      orderBy: {
-        created_at: "desc", // 新しいチームが上に表示されるように
-      },
-    });
+      });
 
-    console.log("取得されたチーム数:", teams.length);
+      if (!team) {
+        console.log("❌ チームが見つかりません, teamId:", teamId);
+        return NextResponse.json({ success: false, error: "チームが見つかりません" }, { status: 404 });
+      }
 
-    // データを整形
-    const formattedTeams: TeamWithMembers[] = teams.map((team) => ({
-      id: team.id,
-      course_step_id: team.course_step_id,
-      name: team.name,
-      project_name: team.project_name,
-      created_at: team.created_at.toISOString(),
-      updated_at: team.updated_at.toISOString(),
-      course_step_name: team.course_step.name,
-      members: team.team_memberships.map((membership) => ({
-        user_id: membership.user.id,
-        user_name: membership.user.name,
-        user_email: membership.user.email,
-        role_in_team: membership.role_in_team,
-        joined_at: membership.joined_at.toISOString(),
-      })),
-    }));
+      console.log("✅ チーム確認完了:", team.name);
 
-    return NextResponse.json({
-      success: true,
-      teams: formattedTeams,
-    });
+      // チームメンバーかどうかチェック
+      const isTeamMember = team.team_memberships.some((m) => m.user_id === currentUserId);
+      if (!isTeamMember) {
+        console.log("❌ 権限なし: ユーザーはチームメンバーではありません");
+        return NextResponse.json({ success: false, error: "このチームを削除する権限がありません" }, { status: 403 });
+      }
+
+      console.log("✅ 権限確認完了");
+
+      // チーム削除（物理削除）
+      await prisma.teams.delete({
+        where: { id: teamId },
+      });
+
+      console.log(`📡 チーム "${team.name}" が削除されました (ID: ${teamId})`);
+      return NextResponse.json({ success: true, message: "チームが削除されました" });
+    } catch (deleteError) {
+      console.error("❌ チーム削除処理エラー:", deleteError);
+      throw deleteError;
+    }
   } catch (error) {
-    console.error("チーム取得エラー:", error);
+    console.error("❌ チーム削除エラー:", error);
+
+    // エラーの詳細情報をログ出力
     if (error instanceof Error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      console.error("❌ エラーメッセージ:", error.message);
+      console.error("❌ エラースタック:", error.stack);
     }
-    return NextResponse.json({ success: false, error: "サーバーエラーが発生しました" }, { status: 500 });
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "チーム削除に失敗しました",
+        debug: process.env.NODE_ENV === "development" ? error.message : undefined,
+      },
+      { status: 500 }
+    );
   }
 }

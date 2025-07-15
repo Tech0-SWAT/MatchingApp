@@ -90,7 +90,7 @@ export default function LoginScreen({ onNavigate }: LoginScreenProps) {
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#6C757D] w-4 h-4" />
                 <Input id="password" type={showPassword ? "text" : "password"} placeholder="パスワードを入力" value={password} onChange={(e) => setPassword(e.target.value)} onKeyPress={handleKeyPress} disabled={isLoading} className="pl-10 pr-10 h-11 border-2 border-gray-300 focus:border-[#5D70F7] transition-colors" />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} disabled={isLoading} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#6C757D] hover:text-[#343A40] disabled:opacity-50">
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                 </button>
               </div>
             </div>
